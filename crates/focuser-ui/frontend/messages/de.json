@@ -477,7 +477,7 @@
   "schedule_lock_change": "Entsperrmethode ändern",
   "schedule_lock_waiting": "Sperrt, sobald der Zeitplan beginnt",
   "schedule_lock_dialog_title": "{name} während des Zeitplans sperren",
-  "schedule_lock_dialog_body": "Solange der Zeitplan läuft, kann die Liste nicht geändert und Focuser nicht beendet oder deinstalliert werden.",
+  "schedule_lock_dialog_body": "Solange der Zeitplan läuft, kann der Liste etwas hinzugefügt, aber nichts entfernt werden, und Focuser kann nicht beendet oder deinstalliert werden.",
   "lock_method_question": "Wie lässt sich vorzeitig entsperren?",
   "lock_length_unit": "Zeichen",
   "schedule_lock_turn_on": "Sperre einschalten",

@@ -485,7 +485,7 @@
   "schedule_lock_change": "Cambia metodo di sblocco",
   "schedule_lock_waiting": "Si blocca all'inizio dell'orario",
   "schedule_lock_dialog_title": "Blocca {name} durante il suo orario",
-  "schedule_lock_dialog_body": "Mentre l'orario è in corso, la lista non può essere modificata e Focuser non può essere chiuso né disinstallato.",
+  "schedule_lock_dialog_body": "Mentre l'orario è in corso, alla lista si può aggiungere ma non togliere nulla, e Focuser non può essere chiuso né disinstallato.",
   "lock_method_question": "Come si può sbloccare prima?",
   "lock_length_unit": "caratteri",
   "schedule_lock_turn_on": "Attiva blocco",

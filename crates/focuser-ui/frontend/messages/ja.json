@@ -469,7 +469,7 @@
   "schedule_lock_change": "解除方法を変更",
   "schedule_lock_waiting": "スケジュール開始時にロックされます",
   "schedule_lock_dialog_title": "スケジュール中に {name} をロック",
-  "schedule_lock_dialog_body": "スケジュールの実行中は、リストを変更できず、Focuser の終了やアンインストールもできません。",
+  "schedule_lock_dialog_body": "スケジュールの実行中は、リストへの追加はできますが削除はできません。Focuser の終了やアンインストールもできません。",
   "lock_method_question": "早めに解除する方法は？",
   "lock_length_unit": "文字",
   "schedule_lock_turn_on": "ロックをオンにする",

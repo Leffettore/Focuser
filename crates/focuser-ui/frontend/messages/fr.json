@@ -485,7 +485,7 @@
   "schedule_lock_change": "Changer la méthode de déverrouillage",
   "schedule_lock_waiting": "Se verrouille au début de l'horaire",
   "schedule_lock_dialog_title": "Verrouiller {name} pendant son horaire",
-  "schedule_lock_dialog_body": "Tant que l'horaire est en cours, la liste ne peut pas être modifiée et Focuser ne peut être ni fermé ni désinstallé.",
+  "schedule_lock_dialog_body": "Tant que l'horaire est en cours, on peut ajouter des éléments à la liste mais rien en retirer, et Focuser ne peut être ni fermé ni désinstallé.",
   "lock_method_question": "Comment déverrouiller plus tôt ?",
   "lock_length_unit": "caractères",
   "schedule_lock_turn_on": "Activer le verrouillage",

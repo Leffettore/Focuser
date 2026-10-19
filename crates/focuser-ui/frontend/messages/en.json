@@ -477,7 +477,7 @@
   "schedule_lock_change": "Change unlock method",
   "schedule_lock_waiting": "Locks when the schedule starts",
   "schedule_lock_dialog_title": "Lock {name} during its schedule",
-  "schedule_lock_dialog_body": "While the schedule is running, the list cannot be changed and Focuser cannot be closed or uninstalled.",
+  "schedule_lock_dialog_body": "While the schedule is running, things can be added to the list but not taken off, and Focuser cannot be closed or uninstalled.",
   "lock_method_question": "How can you unlock early?",
   "lock_length_unit": "characters",
   "schedule_lock_turn_on": "Turn on lock",

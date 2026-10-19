@@ -485,7 +485,7 @@
   "schedule_lock_change": "Cambiar el método de desbloqueo",
   "schedule_lock_waiting": "Se bloquea cuando empieza el horario",
   "schedule_lock_dialog_title": "Bloquear {name} durante su horario",
-  "schedule_lock_dialog_body": "Mientras el horario está en curso, la lista no se puede cambiar y Focuser no se puede cerrar ni desinstalar.",
+  "schedule_lock_dialog_body": "Mientras el horario está en curso, se pueden añadir cosas a la lista pero no quitar nada, y Focuser no se puede cerrar ni desinstalar.",
   "lock_method_question": "¿Cómo se puede desbloquear antes?",
   "lock_length_unit": "caracteres",
   "schedule_lock_turn_on": "Activar bloqueo",

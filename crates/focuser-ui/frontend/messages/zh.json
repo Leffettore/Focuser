@@ -469,7 +469,7 @@
   "schedule_lock_change": "更改解锁方式",
   "schedule_lock_waiting": "时间表开始时锁定",
   "schedule_lock_dialog_title": "在计划期间锁定 {name}",
-  "schedule_lock_dialog_body": "在时间表运行期间，无法更改该列表，也无法关闭或卸载 Focuser。",
+  "schedule_lock_dialog_body": "在时间表运行期间，只能向列表添加内容，不能删除，也无法关闭或卸载 Focuser。",
   "lock_method_question": "如何提前解锁？",
   "lock_length_unit": "个字符",
   "schedule_lock_turn_on": "开启锁定",
