@@ -14,21 +14,34 @@ pub struct BlockEngine {
     db: Database,
     /// Cached block lists for fast evaluation (refreshed periodically).
     cached_lists: Vec<BlockList>,
+    /// The list of a focus session that is locked, and its rounds to go.
+    locked_session: Option<(EntityId, u32)>,
 }
 
 impl BlockEngine {
     pub fn new(db: Database) -> Result<Self> {
         upgrade_exceptions(&db)?;
         let cached_lists = db.list_block_lists()?;
+        let locked_session = locked_session(&db)?;
         info!(count = cached_lists.len(), "Block engine initialized");
-        Ok(Self { db, cached_lists })
+        Ok(Self {
+            db,
+            cached_lists,
+            locked_session,
+        })
     }
 
     /// Reload block lists from the database.
     pub fn refresh(&mut self) -> Result<()> {
         self.cached_lists = self.db.list_block_lists()?;
+        self.locked_session = locked_session(&self.db)?;
         debug!(count = self.cached_lists.len(), "Refreshed block lists");
         Ok(())
+    }
+
+    /// The list of a focus session that is locked, and its rounds to go (#47).
+    pub fn locked_focus_session(&self) -> Option<(EntityId, u32)> {
+        self.locked_session
     }
 
     /// Check if a domain should be blocked.
@@ -146,10 +159,11 @@ impl BlockEngine {
         spent_domains: &[String],
     ) -> ExtensionRuleSet {
         let mut rules = ExtensionRuleSet::empty();
-        rules.locked = self
-            .cached_lists
-            .iter()
-            .any(|l| l.is_modification_protected());
+        rules.locked = self.locked_session.is_some()
+            || self
+                .cached_lists
+                .iter()
+                .any(|l| l.is_modification_protected());
 
         for list in &self.cached_lists {
             if !list.is_effectively_active() {
@@ -352,19 +366,26 @@ impl BlockEngine {
             .any(|l| l.has_uninstall_protection())
     }
 
+    /// Focuser may not be quit: a list's lock says so, or a focus session is
+    /// locked.
     pub fn has_service_protection(&self) -> bool {
-        self.cached_lists.iter().any(|l| l.has_service_protection())
+        self.locked_session.is_some()
+            || self.cached_lists.iter().any(|l| l.has_service_protection())
     }
 
     pub fn has_any_active_protection(&self) -> bool {
         self.cached_lists.iter().any(|l| l.has_active_protection())
     }
 
+    /// The list may not be loosened: its own lock, or a locked focus session
+    /// running on it.
     pub fn is_block_list_protected(&self, id: EntityId) -> bool {
-        self.cached_lists
-            .iter()
-            .find(|l| l.id == id)
-            .is_some_and(|l| l.is_modification_protected())
+        self.locked_session.is_some_and(|(list, _)| list == id)
+            || self
+                .cached_lists
+                .iter()
+                .find(|l| l.id == id)
+                .is_some_and(|l| l.is_modification_protected())
     }
 
     pub fn active_protection_info(&self) -> Vec<ProtectionInfo> {
@@ -431,6 +452,14 @@ fn has_hours(list: &BlockList) -> bool {
     list.schedule
         .as_ref()
         .is_some_and(|s| !s.time_slots.is_empty())
+}
+
+/// The locked focus session, if one is running and has rounds to go.
+fn locked_session(db: &Database) -> Result<Option<(EntityId, u32)>> {
+    Ok(db
+        .get_active_pomodoro_session()?
+        .map(|s| (s.block_list_id, s.locked_rounds_left()))
+        .filter(|(_, left)| *left > 0))
 }
 
 #[cfg(test)]

@@ -685,7 +685,7 @@ fn api_remove_site(body: &str, state: &AppState) -> (&'static str, String) {
         Ok(l) => l,
         Err(e) => return ("404 Not Found", format!(r#"{{"error":"{}"}}"#, e)),
     };
-    if list.is_modification_protected() {
+    if list.is_modification_protected() || eng.is_block_list_protected(uuid) {
         return (
             "403 Forbidden",
             serde_json::json!({"error": "protected"}).to_string(),
@@ -891,7 +891,7 @@ fn api_toggle_list(body: &str, state: &AppState) -> (&'static str, String) {
         Ok(l) => l,
         Err(e) => return ("404 Not Found", format!(r#"{{"error":"{}"}}"#, e)),
     };
-    if list.is_modification_protected() {
+    if list.is_modification_protected() || eng.is_block_list_protected(uuid) {
         return (
             "403 Forbidden",
             serde_json::json!({"error": "protected"}).to_string(),

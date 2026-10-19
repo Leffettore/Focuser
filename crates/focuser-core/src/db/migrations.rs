@@ -69,6 +69,21 @@ fn rewrite_block_lists(
     Ok(())
 }
 
+/// A focus session can be locked for some rounds (#47). Looked for first, so
+/// running it again changes nothing.
+fn add_pomodoro_lock(conn: &Connection) -> Result<()> {
+    if conn
+        .prepare("SELECT locked_rounds FROM pomodoro_sessions LIMIT 0")
+        .is_ok()
+    {
+        return Ok(());
+    }
+    conn.execute_batch(
+        "ALTER TABLE pomodoro_sessions ADD COLUMN locked_rounds INTEGER NOT NULL DEFAULT 0;",
+    )
+    .map_err(|e| FocuserError::Database(e.to_string()))
+}
+
 /// Run all database migrations.
 pub fn run_all(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -233,6 +248,10 @@ pub fn run_all(conn: &Connection) -> Result<()> {
         (
             "v8: reclassify mistyped website rules (*word* wildcards, Domain values with a *)",
             Step::Code(reclassify_mistyped_website_rules),
+        ),
+        (
+            "v9: focus sessions locked for a number of rounds",
+            Step::Code(add_pomodoro_lock),
         ),
     ];
 

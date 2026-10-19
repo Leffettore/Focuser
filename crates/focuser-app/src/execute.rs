@@ -588,30 +588,46 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
         Command::PomodoroStart {
             block_list_id,
             config,
+            lock_rounds,
         } => {
             config
                 .validate()
                 .map_err(|e| CommandError::Validation(e.to_string()))?;
+            if lock_rounds.is_some_and(|n| !(1..=MAX_FOCUS_LOCK_ROUNDS).contains(&n)) {
+                return Err(CommandError::Validation(format!(
+                    "a focus session can be locked for 1 to {MAX_FOCUS_LOCK_ROUNDS} rounds"
+                )));
+            }
 
             // No lock check: a session can only tighten a locked list. Its breaks
             // and its end leave such a list on (#14).
-            let session = pomodoro::start_session(&mut engine, block_list_id, config)?;
+            let session = pomodoro::start_session(
+                &mut engine,
+                block_list_id,
+                config,
+                lock_rounds.unwrap_or(0),
+            )?;
             // A work phase suspends allowances and can change what is blocked.
             ctx.sync_hosts(&engine);
             Ok(CommandResult::PomodoroSession(Box::new(session)))
         }
 
-        Command::PomodoroPause => Ok(CommandResult::Flag(pomodoro::pause_session(&mut engine)?)),
+        Command::PomodoroPause => {
+            ensure_focus_unlocked(&engine)?;
+            Ok(CommandResult::Flag(pomodoro::pause_session(&mut engine)?))
+        }
 
         Command::PomodoroResume => Ok(CommandResult::Flag(pomodoro::resume_session(&mut engine)?)),
 
         Command::PomodoroSkip => {
+            ensure_focus_unlocked(&engine)?;
             let advanced = pomodoro::skip_phase(&mut engine)?.is_some();
             ctx.sync_hosts(&engine);
             Ok(CommandResult::Flag(advanced))
         }
 
         Command::PomodoroStop => {
+            ensure_focus_unlocked(&engine)?;
             let stopped = pomodoro::stop_session(&mut engine)?;
             ctx.sync_hosts(&engine);
             Ok(CommandResult::Flag(stopped))
@@ -888,6 +904,18 @@ fn ensure_schedule_ends(list: &BlockList) -> CommandOutcome<()> {
     Ok(())
 }
 
+/// A focus session can be locked for at most this many rounds, so a slip of
+/// the finger cannot lock one for a week.
+pub const MAX_FOCUS_LOCK_ROUNDS: u32 = 12;
+
+/// Stop, Skip and Pause wait for a locked focus session's rounds (#47).
+fn ensure_focus_unlocked(engine: &BlockEngine) -> CommandOutcome<()> {
+    match engine.locked_focus_session() {
+        Some(_) => Err(CommandError::Protected),
+        None => Ok(()),
+    }
+}
+
 /// Wholesale operations cannot replace or disable a protected list.
 fn ensure_nothing_protected(engine: &BlockEngine) -> CommandOutcome<()> {
     for list in engine.block_lists() {
@@ -1034,7 +1062,7 @@ fn clear_across_lists(
     let mut cleared = 0u32;
 
     for mut list in engine.db().list_block_lists()? {
-        if list.is_modification_protected() {
+        if list.is_modification_protected() || engine.is_block_list_protected(list.id) {
             continue;
         }
         let n = clear(&mut list);
@@ -3285,12 +3313,92 @@ mod tests {
                     long_break_secs: 900,
                     cycles_until_long_break: 4,
                 },
+                lock_rounds: None,
             },
         )
         .unwrap();
 
         let running = execute(&ctx, Command::PomodoroStatus).unwrap();
         assert!(matches!(running, CommandResult::PomodoroStatus(Some(_))));
+    }
+
+    fn start_focus(
+        ctx: &AppContext,
+        list: EntityId,
+        lock_rounds: Option<u32>,
+    ) -> CommandOutcome<CommandResult> {
+        execute(
+            ctx,
+            Command::PomodoroStart {
+                block_list_id: list,
+                config: PomodoroConfig {
+                    work_secs: 1500,
+                    short_break_secs: 300,
+                    long_break_secs: 900,
+                    cycles_until_long_break: 4,
+                },
+                lock_rounds,
+            },
+        )
+    }
+
+    /// As if `done` work phases had ended.
+    fn finish_rounds(ctx: &AppContext, done: u32) {
+        let mut engine = ctx.engine.lock().unwrap();
+        let mut session = engine.db().get_active_pomodoro_session().unwrap().unwrap();
+        session.completed_cycles = done;
+        engine.db().update_pomodoro_session(&session).unwrap();
+        engine.refresh().unwrap();
+    }
+
+    #[test]
+    fn a_locked_focus_session_holds_until_its_rounds_are_done() {
+        let ctx = ctx();
+        let list = create(&ctx, "Focus");
+        start_focus(&ctx, list.id, Some(2)).unwrap();
+
+        let refused = |cmd: Command| matches!(execute(&ctx, cmd), Err(CommandError::Protected));
+        assert!(refused(Command::PomodoroStop));
+        assert!(refused(Command::PomodoroSkip));
+        assert!(refused(Command::PomodoroPause));
+        // Its list cannot be loosened meanwhile, and Focuser cannot be quit.
+        assert!(refused(Command::ToggleBlockList {
+            id: list.id,
+            enabled: false
+        }));
+        assert!(refused(Command::DeleteBlockList { id: list.id }));
+        assert!(ctx.engine.lock().unwrap().has_service_protection());
+
+        finish_rounds(&ctx, 1);
+        assert!(refused(Command::PomodoroStop), "one round of two");
+
+        finish_rounds(&ctx, 2);
+        assert!(!ctx.engine.lock().unwrap().has_service_protection());
+        assert!(matches!(
+            execute(&ctx, Command::PomodoroStop).unwrap(),
+            CommandResult::Flag(true)
+        ));
+    }
+
+    #[test]
+    fn a_focus_session_is_unlocked_unless_asked() {
+        let ctx = ctx();
+        let list = create(&ctx, "Focus");
+        start_focus(&ctx, list.id, None).unwrap();
+        assert!(matches!(
+            execute(&ctx, Command::PomodoroStop).unwrap(),
+            CommandResult::Flag(true)
+        ));
+    }
+
+    #[test]
+    fn a_focus_lock_is_one_to_twelve_rounds() {
+        let ctx = ctx();
+        let list = create(&ctx, "Focus");
+        for rounds in [0, 13] {
+            let err = start_focus(&ctx, list.id, Some(rounds)).unwrap_err();
+            assert_eq!(err.code(), "validation", "{rounds} rounds");
+        }
     }
 
     #[test]
@@ -3308,6 +3416,7 @@ mod tests {
                     long_break_secs: 900,
                     cycles_until_long_break: 4,
                 },
+                lock_rounds: None,
             },
         )
         .unwrap_err();
@@ -3348,6 +3457,7 @@ mod tests {
                 Command::PomodoroStart {
                     block_list_id: list.id,
                     config: PomodoroConfig::CLASSIC,
+                    lock_rounds: None,
                 },
             )
             .unwrap();
