@@ -31,6 +31,7 @@ import {
   type RuleSet,
   trackingKey,
 } from "@/lib/rules";
+import { channelOf, namesChannel, youtubeVideoId } from "@/lib/youtube";
 import type { BlockContext, Message, MessageReply } from "@/lib/messages";
 import { SharedActivity } from "@/lib/shared-activity";
 
@@ -66,6 +67,9 @@ export default defineBackground(() => {
   // off the in-page reload below — that reload brings the block straight
   // back, and the site rewrites again, forever.
   const showingBlock = new Set<number>();
+  // The YouTube video each tab loaded with, to tell a move to another video
+  // from the page rewriting its own address.
+  const loadedVideo = new Map<number, string | null>();
   let lastTickAt = 0;
   const sharedActivity = new SharedActivity();
   let samplingShared = false;
@@ -199,7 +203,7 @@ export default defineBackground(() => {
   }
 
   async function blockTab(tabId: number, hostname: string, url: string) {
-    const hit = match(rules, hostname, url);
+    const hit = match(rules, hostname, url) ?? (await channelMatch(url));
     if (!hit) return;
     if (!shouldInject(tabId, trackingKey(hit))) return;
     // Marked before anything is awaited: the site runs while the app is asked
@@ -226,6 +230,17 @@ export default defineBackground(() => {
       // to do but leave the tab alone.
       showingBlock.delete(tabId);
     }
+  }
+
+  /**
+   * The rule a YouTube video falls under through its channel (#48). Its own
+   * address names only the video, so the channel is looked up.
+   */
+  async function channelMatch(url: string): Promise<BlockMatch | null> {
+    const video = youtubeVideoId(url);
+    if (!video || !namesChannel(rules)) return null;
+    const channel = await channelOf(video);
+    return channel ? match(rules, new URL(channel).hostname, channel) : null;
   }
 
   async function enforceOnOpenTabs() {
@@ -292,6 +307,7 @@ export default defineBackground(() => {
       if (key.startsWith(`${tabId}:`)) recentInjections.delete(key);
     }
     showingBlock.delete(tabId);
+    loadedVideo.delete(tabId);
   }
 
   browser.webNavigation.onCommitted.addListener(async (details) => {
@@ -301,6 +317,7 @@ export default defineBackground(() => {
     // second visit within the dedup window got no block page: the site stayed
     // hidden behind the early style, but loaded and able to play sound.
     forgetTab(details.tabId);
+    loadedVideo.set(details.tabId, youtubeVideoId(to.url));
     await blockTab(details.tabId, to.hostname, to.url);
   });
 
@@ -310,7 +327,19 @@ export default defineBackground(() => {
   browser.webNavigation.onHistoryStateUpdated.addListener((details) => {
     if (showingBlock.has(details.tabId)) return;
     const to = destination(details);
-    if (to && match(rules, to.hostname, to.url)) void browser.tabs.reload(details.tabId);
+    if (!to) return;
+    if (match(rules, to.hostname, to.url)) {
+      void browser.tabs.reload(details.tabId);
+      return;
+    }
+    // A move to another video can be a blocked channel's. The video the page
+    // loaded with rewriting its own address is not a move, and a reload for
+    // it would loop.
+    const video = youtubeVideoId(to.url);
+    if (video && video !== loadedVideo.get(details.tabId)) {
+      loadedVideo.set(details.tabId, video);
+      void channelMatch(to.url).then((hit) => hit && browser.tabs.reload(details.tabId));
+    }
   });
 
   browser.tabs.onRemoved.addListener(forgetTab);

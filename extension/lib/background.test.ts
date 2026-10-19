@@ -20,8 +20,19 @@ let injected = vi.fn(async (_injection: { files?: string[] }) => undefined);
 const blockPages = () => injected.mock.calls.filter(([i]) => i.files?.includes("/block-page.js"));
 
 /** Start the background worker with `rules` already loaded. */
-async function start(rules: RuleSet = RULES, { appRunning = true } = {}) {
+async function start(
+  rules: RuleSet = RULES,
+  {
+    appRunning = true,
+    channel = "",
+  }: { appRunning?: boolean; channel?: string | ((asked: string) => string) } = {},
+) {
   const fetched = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) => {
+    // YouTube's oEmbed answer: which channel a video is from.
+    if (String(url).startsWith("https://www.youtube.com/oembed")) {
+      const author = typeof channel === "function" ? channel(String(url)) : channel;
+      return new Response(JSON.stringify({ author_url: author }));
+    }
     if (!appRunning) throw new TypeError("Failed to fetch");
     return String(url).includes("/api/rules")
       ? new Response(JSON.stringify(rules))
@@ -234,6 +245,71 @@ describe("the browser's extensions page while a list is locked", () => {
     privateWindows(false);
     await start(LOCKED);
     expect(await openExtensionsPage()).not.toHaveBeenCalled();
+  });
+});
+
+describe("a video from a blocked YouTube channel (#48)", () => {
+  const CHANNEL: RuleSet = {
+    ...RULES,
+    blocked_domains: [],
+    allowed_url_paths: [],
+    blocked_url_paths: ["youtube.com/@badchannel"],
+  };
+  const visit = (url: string) =>
+    fakeBrowser.webNavigation.onCommitted.trigger({ tabId: 7, frameId: 0, url } as never);
+  const move = (url: string) =>
+    fakeBrowser.webNavigation.onHistoryStateUpdated.trigger({ tabId: 7, frameId: 0, url } as never);
+
+  it("gets the block page", async () => {
+    await start(CHANNEL, { channel: "https://www.youtube.com/@BadChannel" });
+    await visit("https://www.youtube.com/watch?v=vid00000101");
+    await vi.waitFor(() => expect(blockPages()).toHaveLength(1));
+  });
+
+  it("does not when the video is from another channel", async () => {
+    const fetched = await start(CHANNEL, { channel: "https://www.youtube.com/@GoodChannel" });
+    await visit("https://www.youtube.com/watch?v=vid00000102");
+    await vi.waitFor(() =>
+      expect(fetched.mock.calls.some(([u]) => String(u).includes("/oembed"))).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(blockPages()).toHaveLength(0);
+  });
+
+  it("is not looked up when no rule names a channel", async () => {
+    const fetched = await start({ ...CHANNEL, blocked_url_paths: [] });
+    await visit("https://www.youtube.com/watch?v=vid00000103");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetched.mock.calls.some(([u]) => String(u).includes("/oembed"))).toBe(false);
+  });
+
+  it("reloads when the page moves on to such a video", async () => {
+    const reload = vi.spyOn(fakeBrowser.tabs, "reload").mockResolvedValue();
+    await start(CHANNEL, {
+      channel: (asked) =>
+        asked.includes("bad")
+          ? "https://www.youtube.com/@BadChannel"
+          : "https://www.youtube.com/@GoodChannel",
+    });
+
+    await visit("https://www.youtube.com/watch?v=goodvid0001");
+    await move("https://www.youtube.com/watch?v=goodvid0001&t=1");
+    await move("https://www.youtube.com/watch?v=badvid00001");
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledWith(7));
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload while a blocked video only rewrites its own address", async () => {
+    // YouTube rewrites the address of the video it has just loaded. A reload
+    // for that would bring the block back and start the loop from #36 again.
+    const reload = vi.spyOn(fakeBrowser.tabs, "reload").mockResolvedValue();
+    await start(CHANNEL, { channel: "https://www.youtube.com/@BadChannel" });
+
+    await visit("https://www.youtube.com/watch?v=badvid00002");
+    await move("https://www.youtube.com/watch?v=badvid00002&t=1");
+    await vi.waitFor(() => expect(blockPages()).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reload).not.toHaveBeenCalled();
   });
 });
 

@@ -260,12 +260,24 @@ export function match(rules: CompiledRules, hostname: string, url: string): Bloc
   for (const path of rules.urlPaths) {
     if (lowerUrl.includes(path)) return { reason: "url-path", target: path };
   }
+  const pages = pageForms(lowerUrl);
   for (const raw of rules.wildcards) {
-    if (matchHostWildcard(raw, hostname) || matchWildcard(raw.toLowerCase(), lowerUrl)) {
+    const glob = raw.toLowerCase();
+    if (matchHostWildcard(raw, hostname) || pages.some((page) => matchWildcard(glob, page))) {
       return { reason: "wildcard", target: raw };
     }
   }
   return null;
+}
+
+/**
+ * The address as given, then without `https://`, then without `www.` too.
+ * People write a page pattern the way they would type it, like
+ * `youtube.com/@name*`, and that has neither (#48).
+ */
+function pageForms(url: string): string[] {
+  const bare = url.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+  return [url, bare, bare.replace(/^www\./, "")];
 }
 
 export function isBlocked(rules: CompiledRules, hostname: string, url: string): boolean {

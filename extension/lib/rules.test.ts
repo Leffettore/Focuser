@@ -101,6 +101,20 @@ describe("match", () => {
     ).not.toBeNull();
   });
 
+  it("matches a page pattern typed without https:// or www. (#48)", () => {
+    const r = rules({ blocked_wildcards: ["youtube.com/@somechannel*"] });
+    for (const url of [
+      "https://www.youtube.com/@somechannel",
+      "https://www.youtube.com/@somechannel/videos",
+      "https://youtube.com/@somechannel",
+    ]) {
+      expect(match(r, new URL(url).hostname, url), url).not.toBeNull();
+    }
+    expect(match(r, "www.youtube.com", "https://www.youtube.com/@otherchannel")).toBeNull();
+    // Still from the start of the address, not anywhere in it.
+    expect(match(r, "link.test", "https://link.test/youtube.com/@somechannel")).toBeNull();
+  });
+
   it("blocks a site that was typed as a bare name, on any ending", () => {
     // The app sends "crunchyroll" as these two patterns, so that a version of
     // this extension already in the stores blocks it too. If this matcher
