@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "@/entrypoints/background";
+import { profileId } from "./api";
 import type { RuleSet } from "./rules";
 
 const RULES: RuleSet = {
@@ -19,12 +20,13 @@ let injected = vi.fn(async (_injection: { files?: string[] }) => undefined);
 const blockPages = () => injected.mock.calls.filter(([i]) => i.files?.includes("/block-page.js"));
 
 /** Start the background worker with `rules` already loaded. */
-async function start(rules: RuleSet = RULES) {
-  const fetched = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) =>
-    String(url).includes("/api/rules")
+async function start(rules: RuleSet = RULES, { appRunning = true } = {}) {
+  const fetched = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) => {
+    if (!appRunning) throw new TypeError("Failed to fetch");
+    return String(url).includes("/api/rules")
       ? new Response(JSON.stringify(rules))
-      : new Response("{}"),
-  );
+      : new Response("{}");
+  });
   vi.stubGlobal("fetch", fetched);
 
   // fake-browser has no toolbar button, script injection or idle detection.
@@ -40,7 +42,7 @@ async function start(rules: RuleSet = RULES) {
 
   background.main();
   // The badge is set once the first rules fetch has been applied.
-  await vi.waitFor(() => expect(badge).toHaveBeenCalled());
+  if (appRunning) await vi.waitFor(() => expect(badge).toHaveBeenCalled());
   return fetched;
 }
 
@@ -172,6 +174,31 @@ describe("telling the app about private windows", () => {
       expect(beat.searchParams.get("browser")).toBeTruthy();
       expect(beat.searchParams.has("incognito_allowed")).toBe(false);
     }
+  });
+});
+
+describe("telling the app when the extension is removed", () => {
+  const removalAddress = () =>
+    vi.spyOn(fakeBrowser.runtime, "setUninstallURL").mockResolvedValue(undefined);
+
+  it("leaves the browser an address of the app's to open, with this profile's id", async () => {
+    const left = removalAddress();
+    await start();
+
+    await vi.waitFor(() => expect(left).toHaveBeenCalled());
+    const url = new URL(String(left.mock.lastCall?.[0]));
+    expect(`${url.origin}${url.pathname}`).toBe("http://127.0.0.1:17549/api/extension-removed");
+    expect(url.searchParams.get("browser")).toBeTruthy();
+    // The id the heartbeat sends. A web page can open the address too, but
+    // it cannot know this.
+    expect(url.searchParams.get("profile")).toBe(await profileId());
+  });
+
+  it("leaves none while the app is not running, where the tab would only show an error", async () => {
+    const left = removalAddress();
+    await start(RULES, { appRunning: false });
+
+    await vi.waitFor(() => expect(left).toHaveBeenCalledWith(""));
   });
 });
 

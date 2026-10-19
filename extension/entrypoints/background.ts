@@ -4,6 +4,7 @@ import {
   detectBrowser,
   fetchRules,
   isIncognitoAllowed,
+  leaveRemovalAddress,
   POLL_INTERVAL_MS,
   profileId,
   reportBlocked,
@@ -50,6 +51,9 @@ export default defineBackground(() => {
   let rules: CompiledRules = EMPTY_RULES;
   let rawRules: RuleSet | null = null;
   let connected = false;
+  // What the browser was last told to open on removal: null until the first
+  // fetch, so an address left by an earlier session is replaced either way.
+  let removalAddressFor: boolean | null = null;
   let index: CategoryIndex = EMPTY_INDEX;
 
   // Keyed by `tabId:target` — a single navigation fires both onCommitted and
@@ -122,6 +126,10 @@ export default defineBackground(() => {
     const next = await fetchRules(browserName);
     const wasConnected = connected;
     connected = next !== null;
+    if (connected !== removalAddressFor) {
+      removalAddressFor = connected;
+      void leaveRemovalAddress(browserName, connected);
+    }
 
     if (next && JSON.stringify(next) !== JSON.stringify(rawRules)) {
       rawRules = next;

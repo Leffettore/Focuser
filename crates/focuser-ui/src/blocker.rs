@@ -381,7 +381,8 @@ fn enforce_browser_extension(
                 warned: false,
             }
         });
-        let waited = now.duration_since(grace.started);
+        let started = grace.started;
+        let waited = now.duration_since(started);
 
         // The extension may still be checking in — just without incognito
         // access — which changes what the user needs to be told to fix.
@@ -412,10 +413,10 @@ fn enforce_browser_extension(
             GraceStep::Close => {}
         }
 
-        // Last look before closing anything, with a wider window still: the
-        // extension may have been installed (or granted incognito) mid-grace
-        // and be warming up.
-        if crate::api::get_safely_connected_browsers(180).contains(browser) {
+        // Last look before closing anything: the extension may have been
+        // installed (or granted incognito) mid-grace. Only a check-in since the
+        // grace began counts. The one before it is the extension going quiet.
+        if crate::api::safely_checked_in_since(browser, started) {
             info!(
                 browser = ?browser,
                 "Extension fully connected during grace period — cancelling termination"
