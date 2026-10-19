@@ -77,6 +77,10 @@ pub struct ExtensionRuleSet {
     /// exceptions, and scoped matching must tell the two apart.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowance_domains: Vec<String>,
+    /// A block list is locked right now. The extension keeps the browser's
+    /// own extensions page shut meanwhile, where it could be switched off.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 impl ExtensionRuleSet {
@@ -93,6 +97,7 @@ impl ExtensionRuleSet {
             allowed_wildcards: Vec::new(),
             allowed_url_paths: Vec::new(),
             allowance_domains: Vec::new(),
+            locked: false,
         }
     }
 

@@ -202,6 +202,41 @@ describe("telling the app when the extension is removed", () => {
   });
 });
 
+describe("the browser's extensions page while a list is locked", () => {
+  const LOCKED: RuleSet = { ...RULES, locked: true };
+  const privateWindows = (allowed: boolean) =>
+    Object.assign(fakeBrowser, { extension: { isAllowedIncognitoAccess: async () => allowed } });
+  /** Open the extensions page in tab 5 and return where the worker sent it. */
+  async function openExtensionsPage() {
+    const sent = vi.spyOn(fakeBrowser.tabs, "update").mockResolvedValue({} as never);
+    await fakeBrowser.tabs.onUpdated.trigger(5, { url: "chrome://extensions/" }, {} as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return sent;
+  }
+
+  it("sends it to a page that says why", async () => {
+    privateWindows(true);
+    await start(LOCKED);
+    const sent = await openExtensionsPage();
+
+    await vi.waitFor(() => expect(sent).toHaveBeenCalled());
+    expect(sent.mock.lastCall?.[0]).toBe(5);
+    expect(String(sent.mock.lastCall?.[1]?.url)).toContain("/locked.html");
+  });
+
+  it("leaves it open while nothing is locked", async () => {
+    privateWindows(true);
+    await start(RULES);
+    expect(await openExtensionsPage()).not.toHaveBeenCalled();
+  });
+
+  it("leaves it open while private windows are not allowed, since that is fixed there", async () => {
+    privateWindows(false);
+    await start(LOCKED);
+    expect(await openExtensionsPage()).not.toHaveBeenCalled();
+  });
+});
+
 describe("opening a blocked site", () => {
   const visit = (url: string, frameId = 0) =>
     fakeBrowser.webNavigation.onCommitted.trigger({ tabId: 7, frameId, url } as never);

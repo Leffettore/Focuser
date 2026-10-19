@@ -24,6 +24,7 @@ import {
   type CompiledRules,
   compile,
   EMPTY_RULES,
+  isExtensionsPage,
   isInternalUrl,
   match,
   ruleCount,
@@ -231,6 +232,7 @@ export default defineBackground(() => {
     const tabs = await browser.tabs.query({});
     for (const tab of tabs) {
       if (!tab.id || !tab.url) continue;
+      await guardExtensionsPage(tab.id, tab.url);
       try {
         const parsed = new URL(tab.url);
         if (isInternalUrl(parsed.protocol)) continue;
@@ -312,6 +314,26 @@ export default defineBackground(() => {
   });
 
   browser.tabs.onRemoved.addListener(forgetTab);
+
+  // ─── The browser's extensions page, while a list is locked ────────
+
+  /**
+   * The extension can be switched off on that page, so it stays shut while a
+   * block list is locked. Not while the extension is kept out of private
+   * windows: that is fixed on the same page, and the app closes the browser
+   * meanwhile anyway.
+   */
+  async function guardExtensionsPage(tabId: number, url: string | undefined) {
+    if (!url || !rawRules?.locked || !isExtensionsPage(url)) return;
+    if ((await isIncognitoAllowed()) === false) return;
+    try {
+      await browser.tabs.update(tabId, { url: browser.runtime.getURL("/locked.html") });
+    } catch {
+      await browser.tabs.remove(tabId).catch(() => undefined);
+    }
+  }
+
+  browser.tabs.onUpdated.addListener((tabId, change) => void guardExtensionsPage(tabId, change.url));
 
   browser.runtime.onMessage.addListener(
     (raw: unknown, sender, sendResponse: (reply: MessageReply) => void) => {

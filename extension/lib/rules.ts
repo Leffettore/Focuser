@@ -24,6 +24,8 @@ export interface RuleSet {
   allowance_domains?: string[];
   domain_categories?: Record<string, string>;
   version?: number;
+  /** A block list is locked right now. */
+  locked?: boolean;
 }
 
 /** Rules with the hot paths pre-canonicalised, built once per rules update. */
@@ -271,6 +273,17 @@ export function isBlocked(rules: CompiledRules, hostname: string, url: string): 
 }
 
 /** Pages the extension must never touch: its own, and the browser's. */
+/**
+ * The browser's own page for its extensions, where this one can be switched
+ * off. Kept shut while a block list is locked.
+ */
+export function isExtensionsPage(url: string): boolean {
+  return (
+    /^(chrome|edge|brave|opera|vivaldi):\/\/extensions(\/|\?|$)/i.test(url) ||
+    /^about:addons\b/i.test(url)
+  );
+}
+
 export function isInternalUrl(protocol: string): boolean {
   return (
     protocol === "chrome:" ||

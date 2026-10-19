@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalHost,
   compile,
+  isExtensionsPage,
   isInternalUrl,
   match,
   matchHostWildcard,
@@ -286,5 +287,30 @@ describe("ruleCount", () => {
 
   it("deduplicates domains that canonicalise to the same host", () => {
     expect(ruleCount(rules({ blocked_domains: ["example.com", "www.example.com"] }))).toBe(1);
+  });
+});
+
+describe("the browser's extensions page", () => {
+  it("is the page in every browser where the extension can be switched off", () => {
+    for (const url of [
+      "chrome://extensions/",
+      "chrome://extensions/?id=jpnhbpbcmagoonmaleppldmcnaibkbmj",
+      "edge://extensions/",
+      "brave://extensions/shortcuts",
+      "opera://extensions",
+      "vivaldi://extensions/",
+      "about:addons",
+    ])
+      expect(isExtensionsPage(url), url).toBe(true);
+  });
+
+  it("is not the rest of the settings, or a site that has the word in it", () => {
+    for (const url of [
+      "chrome://settings/",
+      "about:preferences",
+      "https://example.com/extensions",
+      "chrome://extensions-internals",
+    ])
+      expect(isExtensionsPage(url), url).toBe(false);
   });
 });

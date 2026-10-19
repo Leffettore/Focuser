@@ -146,6 +146,10 @@ impl BlockEngine {
         spent_domains: &[String],
     ) -> ExtensionRuleSet {
         let mut rules = ExtensionRuleSet::empty();
+        rules.locked = self
+            .cached_lists
+            .iter()
+            .any(|l| l.is_modification_protected());
 
         for list in &self.cached_lists {
             if !list.is_effectively_active() {
@@ -471,6 +475,26 @@ mod tests {
             ["*.crunchyroll.*", "crunchyroll.*"]
         );
         assert!(engine.has_extension_only_rules());
+    }
+
+    /// The extension keeps the browser's extensions page shut while this is on.
+    #[test]
+    fn the_extension_hears_while_a_list_is_locked() {
+        let mut engine = setup_engine();
+        assert!(!engine.compile_extension_rules().locked);
+
+        let now = chrono::Utc::now();
+        let mut list = engine.block_lists()[0].clone();
+        list.protection = Some(focuser_common::types::Protection {
+            prevent_uninstall: false,
+            prevent_service_stop: false,
+            prevent_modification: true,
+            started_at: now,
+            expires_at: Some(now + chrono::Duration::hours(1)),
+        });
+        engine.db().update_block_list(&list).unwrap();
+        engine.refresh().unwrap();
+        assert!(engine.compile_extension_rules().locked);
     }
 
     #[test]
