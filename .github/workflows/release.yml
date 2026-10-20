@@ -112,6 +112,8 @@ jobs:
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/bundle/deb/*.deb dist/ 2>/dev/null || true
+          # Built all along for Fedora and openSUSE, and never published (#3).
+          cp target/${{ matrix.target }}/release/bundle/rpm/*.rpm dist/ 2>/dev/null || true
           cp target/${{ matrix.target }}/release/bundle/appimage/*.AppImage dist/ 2>/dev/null || true
           cp target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.sig dist/ 2>/dev/null || true
           cp target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.tar.gz dist/ 2>/dev/null || true

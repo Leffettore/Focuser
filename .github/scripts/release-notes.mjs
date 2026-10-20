@@ -34,13 +34,13 @@ const install = `## Downloads
 | Windows | \`.exe\` (NSIS installer) | \`Focuser-Portable.exe\` |
 | macOS (Intel) | \`.dmg\` | none |
 | macOS (Apple Silicon) | \`.dmg\` | none |
-| Linux | \`.deb\` / \`.AppImage\` | \`Focuser-Linux-x86_64\` |
+| Linux | \`.deb\` / \`.rpm\` / \`.AppImage\` | \`Focuser-Linux-x86_64\` |
 
 ## Installation
 
 - **Windows**: Download the \`.exe\` installer, run it, and follow the setup wizard. Focuser will be added to Start Menu and auto-start on boot.
 - **macOS**: Download the \`.dmg\`, open it, drag Focuser to Applications.
-- **Linux**: Use the \`.deb\` for Debian/Ubuntu (\`sudo dpkg -i Focuser_*.deb\`) or the \`.AppImage\` for any distro.
+- **Linux**: Use the \`.deb\` for Debian/Ubuntu (\`sudo apt install ./Focuser_*.deb\`), the \`.rpm\` for Fedora (\`sudo dnf install ./Focuser-*.rpm\`), or the \`.AppImage\` for any distro. If the AppImage shows a white screen, \`Focuser-Linux-x86_64\` runs on your system's own \`webkit2gtk-4.1\` instead.
 
 ## Browser extension
 
