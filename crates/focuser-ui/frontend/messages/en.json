@@ -398,6 +398,7 @@
   "apps_kind_executable_name": "Executable name",
   "apps_kind_executable_path": "Full path",
   "apps_kind_window_title": "Window title",
+  "apps_window_title_windows_only": "Window titles can only be read on Windows. On this system such a rule blocks nothing.",
   "apps_kind_bundle_id": "Bundle ID",
   "apps_value_label": "Application to block",
   "apps_add": "Add",

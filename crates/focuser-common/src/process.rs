@@ -65,6 +65,18 @@ pub fn name_for_path(path: &str) -> String {
     imp::name_for_path(path)
 }
 
+/// Where the program behind a running process lives on disk, if the OS says.
+pub fn exe_path(pid: u32) -> Option<String> {
+    imp::exe_path(pid)
+}
+
+/// The titles of the visible top-level windows, by the process that owns
+/// them. Windows only: Linux and macOS give no reliable way to read another
+/// app's window titles, so there it is always empty.
+pub fn window_titles() -> std::collections::HashMap<u32, Vec<String>> {
+    imp::window_titles()
+}
+
 /// What a running copy of the program `name` is called in [`list`].
 ///
 /// Only Linux changes it: the kernel keeps 15 characters of a process name,
@@ -147,6 +159,61 @@ mod imp {
         }
 
         found
+    }
+
+    pub fn exe_path(pid: u32) -> Option<String> {
+        use windows::Win32::System::Threading::{PROCESS_NAME_WIN32, QueryFullProcessImageNameW};
+        use windows::core::PWSTR;
+
+        let mut buf = [0u16; 1024];
+        let mut len = buf.len() as u32;
+        // SAFETY: the handle is only used when OpenProcess succeeded and is
+        // closed before returning; the call writes at most `len` units.
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+            let read = QueryFullProcessImageNameW(
+                handle,
+                PROCESS_NAME_WIN32,
+                PWSTR(buf.as_mut_ptr()),
+                &mut len,
+            );
+            let _ = CloseHandle(handle);
+            read.ok()?;
+        }
+        Some(String::from_utf16_lossy(&buf[..len as usize]))
+    }
+
+    pub fn window_titles() -> std::collections::HashMap<u32, Vec<String>> {
+        use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+        };
+
+        type Titles = std::collections::HashMap<u32, Vec<String>>;
+
+        unsafe extern "system" fn collect(window: HWND, titles: LPARAM) -> BOOL {
+            // SAFETY: `titles` is the map below, borrowed for the whole
+            // EnumWindows call that runs this.
+            let titles = unsafe { &mut *(titles.0 as *mut Titles) };
+            if unsafe { IsWindowVisible(window) }.as_bool() {
+                let mut text = [0u16; 512];
+                let len = unsafe { GetWindowTextW(window, &mut text) };
+                if len > 0 {
+                    let mut pid = 0u32;
+                    unsafe { GetWindowThreadProcessId(window, Some(&mut pid)) };
+                    titles
+                        .entry(pid)
+                        .or_default()
+                        .push(String::from_utf16_lossy(&text[..len as usize]));
+                }
+            }
+            true.into()
+        }
+
+        let mut titles = Titles::new();
+        // SAFETY: the callback only touches `titles`, which outlives the call.
+        let _ = unsafe { EnumWindows(Some(collect), LPARAM(&mut titles as *mut Titles as isize)) };
+        titles
     }
 
     /// Asks the kernel directly. This used to start PowerShell and query WMI,
@@ -354,6 +421,18 @@ mod imp {
         name
     }
 
+    pub fn exe_path(pid: u32) -> Option<String> {
+        use nix::libc::{PROC_PIDPATHINFO_MAXSIZE, proc_pidpath};
+        let mut buf = vec![0u8; PROC_PIDPATHINFO_MAXSIZE as usize];
+        // SAFETY: the buffer is exactly as large as the call is told it is.
+        let len = unsafe { proc_pidpath(pid as i32, buf.as_mut_ptr().cast(), buf.len() as u32) };
+        (len > 0).then(|| String::from_utf8_lossy(&buf[..len as usize]).into_owned())
+    }
+
+    pub fn window_titles() -> std::collections::HashMap<u32, Vec<String>> {
+        std::collections::HashMap::new()
+    }
+
     /// `ps -p` rather than a full sweep: the caller already knows the pid and
     /// runs on a timer.
     pub fn name_for_pid(pid: u32) -> Option<String> {
@@ -498,6 +577,15 @@ mod imp {
         }
     }
 
+    pub fn exe_path(pid: u32) -> Option<String> {
+        let path = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+        Some(path.to_string_lossy().into_owned())
+    }
+
+    pub fn window_titles() -> std::collections::HashMap<u32, Vec<String>> {
+        std::collections::HashMap::new()
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -541,6 +629,13 @@ mod tests {
             name: "focuser".into(),
         };
         assert!(!me.is_killable());
+    }
+
+    #[test]
+    fn the_path_of_this_test_is_the_file_it_runs_from() {
+        let here = std::env::current_exe().unwrap();
+        let found = exe_path(std::process::id()).expect("a path for this process");
+        assert_eq!(std::path::Path::new(&found).file_name(), here.file_name());
     }
 
     #[test]

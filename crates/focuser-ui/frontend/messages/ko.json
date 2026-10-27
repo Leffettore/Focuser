@@ -311,6 +311,7 @@
   "apps_kind_executable_name": "실행 파일 이름",
   "apps_kind_executable_path": "전체 경로",
   "apps_kind_window_title": "창 제목",
+  "apps_window_title_windows_only": "창 제목은 Windows에서만 읽을 수 있습니다. 이 시스템에서는 이런 규칙이 아무것도 차단하지 않습니다.",
   "apps_kind_bundle_id": "번들 ID",
   "apps_value_label": "차단할 앱",
   "apps_add": "추가",

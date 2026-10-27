@@ -317,6 +317,7 @@
   "apps_kind_executable_name": "Nome dell'eseguibile",
   "apps_kind_executable_path": "Percorso completo",
   "apps_kind_window_title": "Titolo della finestra",
+  "apps_window_title_windows_only": "I titoli delle finestre si possono leggere solo su Windows. Su questo sistema una regola così non blocca nulla.",
   "apps_kind_bundle_id": "ID del bundle",
   "apps_value_label": "Applicazione da bloccare",
   "apps_add": "Aggiungi",

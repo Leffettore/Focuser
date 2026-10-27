@@ -11,6 +11,7 @@ use focuser_common::browser::identify_browser;
 use focuser_common::extension::BrowserType;
 use focuser_common::host::any_host_matches;
 use focuser_common::process;
+use focuser_common::types::AppMatchType;
 use focuser_common::uninstall;
 use tracing::{info, warn};
 
@@ -308,18 +309,71 @@ fn kill_blocked_processes(
         .map(|s| s.to_ascii_lowercase())
         .collect();
 
-    for proc in process::list() {
+    // ponytail: inside the engine lock, but only when a list has such a rule:
+    // one window sweep and one path query per process, a few milliseconds.
+    let titles = if active_app_rules(eng).any(|r| matches!(r, AppMatchType::WindowTitle(_))) {
+        process::window_titles()
+    } else {
+        HashMap::new()
+    };
+    for (pid, name, list_name) in
+        blocked_processes(eng, &process::list(), &exempt, process::exe_path, &titles)
+    {
+        if process::terminate(pid) {
+            info!(pid, name = %name, list = %list_name, "Killed blocked process");
+            let _ = eng.record_blocked(&name);
+        }
+    }
+}
+
+/// The app rules of every list that is blocking right now.
+fn active_app_rules(eng: &focuser_core::BlockEngine) -> impl Iterator<Item = &AppMatchType> {
+    eng.block_lists()
+        .iter()
+        .filter(|l| l.is_effectively_active())
+        .flat_map(|l| &l.applications)
+        .filter(|r| r.enabled)
+        .map(|r| &r.match_type)
+}
+
+/// Which running processes a list blocks, and which list.
+///
+/// A program's path is read only while some rule is written against one.
+/// Window titles never count for a browser: its title follows the open tab,
+/// and sites are the website rules' job.
+fn blocked_processes(
+    eng: &focuser_core::BlockEngine,
+    procs: &[process::Process],
+    exempt: &HashSet<String>,
+    mut exe_path: impl FnMut(u32) -> Option<String>,
+    titles: &HashMap<u32, Vec<String>>,
+) -> Vec<(u32, String, String)> {
+    let wants_paths = active_app_rules(eng).any(|r| matches!(r, AppMatchType::ExecutablePath(_)));
+    let mut blocked = Vec::new();
+    for proc in procs {
         if !proc.is_killable() || exempt.contains(&proc.name.to_ascii_lowercase()) {
             continue;
         }
-        let Some(list_name) = eng.check_app(&proc.name, None, None) else {
-            continue;
+        let path = if wants_paths {
+            exe_path(proc.pid)
+        } else {
+            None
         };
-        if process::terminate(proc.pid) {
-            info!(pid = proc.pid, name = %proc.name, list = %list_name, "Killed blocked process");
-            let _ = eng.record_blocked(&proc.name);
+        let own_titles = titles
+            .get(&proc.pid)
+            .filter(|_| identify_browser(&proc.name).is_none())
+            .filter(|t| !t.is_empty());
+        let list = match own_titles {
+            Some(titles) => titles
+                .iter()
+                .find_map(|t| eng.check_app(&proc.name, path.as_deref(), Some(t))),
+            None => eng.check_app(&proc.name, path.as_deref(), None),
+        };
+        if let Some(list) = list {
+            blocked.push((proc.pid, proc.name.clone(), list.to_string()));
         }
     }
+    blocked
 }
 
 /// Kill processes whose executable name matches an allowance that is
@@ -642,6 +696,73 @@ fn flush_dns() {
 #[cfg(test)]
 mod tests {
     use super::is_browser_subprocess;
+
+    fn engine_with_app_rules(
+        rules: Vec<focuser_common::types::AppRule>,
+    ) -> focuser_core::BlockEngine {
+        let db = focuser_core::db::Database::open_in_memory().unwrap();
+        let mut list = focuser_common::types::BlockList::new("Games");
+        list.applications = rules;
+        db.create_block_list(&list).unwrap();
+        focuser_core::BlockEngine::new(db).unwrap()
+    }
+
+    fn proc(pid: u32, name: &str) -> process::Process {
+        process::Process {
+            pid,
+            name: name.into(),
+        }
+    }
+
+    /// Both kinds were offered on the Applications page and never blocked
+    /// anything, because the loop only ever passed the name (#56).
+    #[test]
+    fn a_program_is_closed_by_its_path_or_its_window_title_too() {
+        use focuser_common::types::AppRule;
+        let eng = engine_with_app_rules(vec![
+            AppRule::path(r"C:\Games\game.exe"),
+            AppRule::window_title("Minecraft"),
+        ]);
+        let browser = focuser_common::browser::KNOWN_BROWSERS[0].exe_names[0];
+        let procs = [
+            proc(10, "game.exe"),
+            proc(11, "javaw.exe"),
+            proc(12, "notepad.exe"),
+            proc(13, browser),
+        ];
+        let titles = HashMap::from([
+            (11, vec!["Minecraft 1.21".to_string()]),
+            // A browser's title follows its tab, and sites are the website
+            // rules' job. Closing the whole browser for it would be wrong.
+            (13, vec!["Minecraft - YouTube".to_string()]),
+        ]);
+        let path = |pid| (pid == 10).then(|| r"C:\Games\game.exe".to_string());
+
+        let closed: Vec<u32> = blocked_processes(&eng, &procs, &HashSet::new(), path, &titles)
+            .into_iter()
+            .map(|(pid, _, _)| pid)
+            .collect();
+        assert_eq!(closed, [10, 11]);
+    }
+
+    #[test]
+    fn nobody_is_asked_for_a_path_while_no_rule_needs_one() {
+        let eng =
+            engine_with_app_rules(vec![focuser_common::types::AppRule::executable("game.exe")]);
+        let mut asked = 0;
+        let closed = blocked_processes(
+            &eng,
+            &[proc(10, "game.exe"), proc(11, "other.exe")],
+            &HashSet::new(),
+            |_| {
+                asked += 1;
+                None
+            },
+            &HashMap::new(),
+        );
+        assert_eq!(closed.len(), 1);
+        assert_eq!(asked, 0);
+    }
 
     #[test]
     fn the_hosts_block_says_how_to_remove_it_by_hand() {

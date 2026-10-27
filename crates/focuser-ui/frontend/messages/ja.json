@@ -311,6 +311,7 @@
   "apps_kind_executable_name": "実行ファイル名",
   "apps_kind_executable_path": "フルパス",
   "apps_kind_window_title": "ウィンドウタイトル",
+  "apps_window_title_windows_only": "ウィンドウのタイトルを読み取れるのは Windows だけです。このシステムではこのルールは何もブロックしません。",
   "apps_kind_bundle_id": "バンドル ID",
   "apps_value_label": "ブロックするアプリ",
   "apps_add": "追加",

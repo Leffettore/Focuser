@@ -317,6 +317,7 @@
   "apps_kind_executable_name": "Nom de l'exécutable",
   "apps_kind_executable_path": "Chemin complet",
   "apps_kind_window_title": "Titre de la fenêtre",
+  "apps_window_title_windows_only": "Les titres de fenêtre ne sont lisibles que sous Windows. Sur ce système, une telle règle ne bloque rien.",
   "apps_kind_bundle_id": "Identifiant de bundle",
   "apps_value_label": "Application à bloquer",
   "apps_add": "Ajouter",

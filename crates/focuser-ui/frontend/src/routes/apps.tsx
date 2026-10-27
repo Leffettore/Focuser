@@ -144,6 +144,11 @@ export function Apps() {
                   </Button>
                 )}
               </form>
+              {kind === "WindowTitle" && hostPlatform() !== "windows" && (
+                <p className="mt-2 text-muted-foreground text-xs">
+                  {m.apps_window_title_windows_only()}
+                </p>
+              )}
               <InlineError error={add.error} />
             </Card>
 

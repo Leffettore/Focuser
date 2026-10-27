@@ -320,6 +320,7 @@
   "apps_kind_executable_name": "Имя исполняемого файла",
   "apps_kind_executable_path": "Полный путь",
   "apps_kind_window_title": "Заголовок окна",
+  "apps_window_title_windows_only": "Заголовки окон можно прочитать только в Windows. В этой системе такое правило ничего не блокирует.",
   "apps_kind_bundle_id": "Идентификатор пакета",
   "apps_value_label": "Приложение для блокировки",
   "apps_add": "Добавить",

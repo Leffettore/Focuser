@@ -309,6 +309,7 @@
   "apps_kind_executable_name": "Nombre del ejecutable",
   "apps_kind_executable_path": "Ruta completa",
   "apps_kind_window_title": "Título de la ventana",
+  "apps_window_title_windows_only": "Los títulos de ventana solo se pueden leer en Windows. En este sistema una regla así no bloquea nada.",
   "apps_value_label": "Aplicación que bloquear",
   "apps_add": "Añadir",
   "apps_browse": "Examinar…",

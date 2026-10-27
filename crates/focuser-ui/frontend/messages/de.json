@@ -314,6 +314,7 @@
   "apps_kind_executable_name": "Name der Programmdatei",
   "apps_kind_executable_path": "Vollständiger Pfad",
   "apps_kind_window_title": "Fenstertitel",
+  "apps_window_title_windows_only": "Fenstertitel lassen sich nur unter Windows lesen. Auf diesem System blockiert eine solche Regel nichts.",
   "apps_kind_bundle_id": "Bundle-ID",
   "apps_value_label": "Zu blockierende Anwendung",
   "apps_add": "Hinzufügen",

@@ -311,6 +311,7 @@
   "apps_kind_executable_name": "可执行文件名",
   "apps_kind_executable_path": "完整路径",
   "apps_kind_window_title": "窗口标题",
+  "apps_window_title_windows_only": "只有在 Windows 上才能读取窗口标题。在此系统上，这种规则不会拦截任何内容。",
   "apps_kind_bundle_id": "Bundle ID",
   "apps_value_label": "要拦截的应用",
   "apps_add": "添加",

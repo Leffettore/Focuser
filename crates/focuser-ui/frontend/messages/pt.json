@@ -317,6 +317,7 @@
   "apps_kind_executable_name": "Nome do executável",
   "apps_kind_executable_path": "Caminho completo",
   "apps_kind_window_title": "Título da janela",
+  "apps_window_title_windows_only": "Os títulos de janela só podem ser lidos no Windows. Neste sistema essa regra não bloqueia nada.",
   "apps_kind_bundle_id": "ID do pacote",
   "apps_value_label": "Aplicativo a bloquear",
   "apps_add": "Adicionar",
