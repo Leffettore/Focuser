@@ -132,6 +132,13 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
+    # The attestation step signs with a token GitHub issues to this run and
+    # stores the record with the repository. Only this job gets that.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
 
     steps:
       - uses: actions/checkout@v4
@@ -224,6 +231,14 @@ jobs:
           python3 -c "import json,sys; d=json.load(open('release/latest.json')); json.dump(d,open('release/latest.json','w'),indent=2)"
           echo "Generated latest.json:"
           cat release/latest.json
+
+      # A signed public record of which run built each file from which commit
+      # (#55). Anyone can check a download with:
+      #   gh attestation verify <file> --repo aadeshrao123/Focuser
+      - name: Attest where every file came from
+        uses: actions/attest@v4
+        with:
+          subject-path: release/*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

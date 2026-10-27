@@ -42,6 +42,14 @@ const install = `## Downloads
 - **macOS**: Download the \`.dmg\`, open it, drag Focuser to Applications.
 - **Linux**: Use the \`.deb\` for Debian/Ubuntu (\`sudo apt install ./Focuser_*.deb\`), the \`.rpm\` for Fedora (\`sudo dnf install ./Focuser-*.rpm\`), or the \`.AppImage\` for any distro. If the AppImage shows a white screen, \`Focuser-Linux-x86_64\` runs on your system's own \`webkit2gtk-4.1\` instead.
 
+## Check a download
+
+Every file here is built and uploaded by this repository's [release workflow](https://github.com/aadeshrao123/Focuser/blob/master/.github/workflows/release.yml), and GitHub shows each file's SHA-256 next to it. To check that a file came from that workflow, use the [GitHub CLI](https://cli.github.com/):
+
+\`\`\`
+gh attestation verify <file> --repo aadeshrao123/Focuser
+\`\`\`
+
 ## Browser extension
 
 - **Chrome / Edge / Brave / Opera**: [Chrome Web Store](https://chromewebstore.google.com/detail/jpnhbpbcmagoonmaleppldmcnaibkbmj)
