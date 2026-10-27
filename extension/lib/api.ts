@@ -2,8 +2,9 @@
  * Client for the desktop app's local HTTP API.
  *
  * Everything stays on the machine: the app serves this on loopback only, and
- * the extension talks to nothing else. There is no remote endpoint anywhere in
- * this codebase, by design.
+ * the extension talks to nothing else, with one exception. When a rule names
+ * a YouTube channel, `youtube.ts` asks YouTube which channel a video is from.
+ * There is no Focuser server anywhere, by design.
  *
  * The old extension also tried Native Messaging first and fell back to HTTP
  * after three failures. The native host has had nothing to connect to since the
