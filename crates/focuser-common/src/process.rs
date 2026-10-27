@@ -65,6 +65,14 @@ pub fn name_for_path(path: &str) -> String {
     imp::name_for_path(path)
 }
 
+/// What a running copy of the program `name` is called in [`list`].
+///
+/// Only Linux changes it: the kernel keeps 15 characters of a process name,
+/// so a rule typed in full has to be cut the same way to ever match (#56).
+pub fn running_name(name: &str) -> &str {
+    imp::running_name(name)
+}
+
 /// The name [`list`] would report for one running process, without listing
 /// them all.
 ///
@@ -231,6 +239,10 @@ mod imp {
         super::file_name(path)
     }
 
+    pub fn running_name(name: &str) -> &str {
+        name
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -336,6 +348,10 @@ mod imp {
         let bundle = std::path::Path::new(trimmed);
         declared_executable(&bundle.join("Contents/Info.plist"))
             .unwrap_or_else(|| super::file_name(trimmed.trim_end_matches(".app")))
+    }
+
+    pub fn running_name(name: &str) -> &str {
+        name
     }
 
     /// `ps -p` rather than a full sweep: the caller already knows the pid and
@@ -464,7 +480,7 @@ mod imp {
     pub const COMM_LEN: usize = 15;
 
     pub fn name_for_path(path: &str) -> String {
-        truncate_to_comm(&super::file_name(path))
+        running_name(&super::file_name(path)).to_string()
     }
 
     /// Straight from `comm`, the same file `list` reads, so no truncation is
@@ -475,10 +491,10 @@ mod imp {
         (!name.is_empty()).then(|| name.to_string())
     }
 
-    fn truncate_to_comm(name: &str) -> String {
+    pub fn running_name(name: &str) -> &str {
         match name.char_indices().nth(COMM_LEN) {
-            Some((cut, _)) => name[..cut].to_string(),
-            None => name.to_string(),
+            Some((cut, _)) => &name[..cut],
+            None => name,
         }
     }
 
@@ -500,7 +516,7 @@ mod imp {
 
         #[test]
         fn truncation_never_splits_a_character() {
-            let cut = truncate_to_comm("ααααααααααααααααα");
+            let cut = running_name("ααααααααααααααααα");
             assert_eq!(cut.chars().count(), COMM_LEN);
         }
     }

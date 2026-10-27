@@ -108,7 +108,9 @@ impl AppRule {
         let name_lower = process_name.to_lowercase();
 
         match &self.match_type {
-            AppMatchType::ExecutableName(name) => name_lower == name.to_lowercase(),
+            AppMatchType::ExecutableName(name) => {
+                name_lower == crate::process::running_name(name).to_lowercase()
+            }
             AppMatchType::ExecutablePath(path) => exe_path
                 .map(|p| p.to_lowercase() == path.to_lowercase())
                 .unwrap_or(false),
@@ -277,5 +279,23 @@ mod tests {
         assert!(list.is_effectively_active());
         assert!(list.should_block_app("discord.exe", None, None));
         assert!(list.should_block_domain("reddit.com"));
+    }
+
+    /// Linux reports a running program under its first 15 characters, so a
+    /// rule typed in full has to be cut the same way to match it (#56).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_long_program_name_typed_in_full_matches_on_linux() {
+        let rule = AppRule::executable("gnome-calculator");
+        assert!(rule.matches_process("gnome-calculato", None, None));
+        assert!(!rule.matches_process("gnome-calc", None, None));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn a_long_program_name_is_compared_whole_elsewhere() {
+        let rule = AppRule::executable("gnome-calculator");
+        assert!(rule.matches_process("gnome-calculator", None, None));
+        assert!(!rule.matches_process("gnome-calculato", None, None));
     }
 }
