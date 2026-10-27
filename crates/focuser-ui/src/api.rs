@@ -326,9 +326,10 @@ fn handle_request(mut stream: std::net::TcpStream, state: &AppState) {
         return;
     }
 
-    // Read headers, extract Content-Length and X-Focuser-Browser
+    // Read headers, extract Content-Length, X-Focuser-Browser and If-None-Match
     let mut content_length: usize = 0;
     let mut focuser_browser: Option<String> = None;
+    let mut if_none_match: Option<String> = None;
     let mut header = String::new();
     loop {
         header.clear();
@@ -343,6 +344,11 @@ fn handle_request(mut stream: std::net::TcpStream, state: &AppState) {
         }
         if let Some(val) = header.strip_prefix("content-length:") {
             content_length = val.trim().parse().unwrap_or(0);
+        }
+        if let Some((name, value)) = header.split_once(':')
+            && name.trim().eq_ignore_ascii_case("if-none-match")
+        {
+            if_none_match = Some(value.trim().to_string());
         }
         // Case-insensitive header name match for X-Focuser-Browser
         if let Some(pos) = header.to_lowercase().find("x-focuser-browser:") {
@@ -376,30 +382,57 @@ fn handle_request(mut stream: std::net::TcpStream, state: &AppState) {
 
     // Route
     let (status, response_body) = route(method, path, &body, state);
-    // A redirect carries where it goes in place of a body.
-    let (location, response_body) = if status.starts_with("302") {
-        (format!("Location: {response_body}\r\n"), String::new())
+    let mut extra = String::new();
+    let (status, response_body) = if status.starts_with("302") {
+        // A redirect carries where it goes in place of a body.
+        extra = format!("Location: {response_body}\r\n");
+        (status, String::new())
+    } else if method == "GET" && path == "/api/rules" && status.starts_with("200") {
+        // The extension asks for this every two seconds (#57). The browser
+        // keeps the last answer and asks again with its tag, so an unchanged
+        // list costs a few bytes instead of the whole list each time.
+        let tag = content_tag(&response_body);
+        extra = format!("ETag: {tag}\r\nCache-Control: no-cache\r\n");
+        if if_none_match.as_deref() == Some(tag.as_str()) {
+            ("304 Not Modified", String::new())
+        } else {
+            (status, response_body)
+        }
     } else {
-        (String::new(), response_body)
+        (status, response_body)
+    };
+    // A 304 has no body, and must not claim a length the full answer lacks.
+    let content = if status.starts_with("304") {
+        String::new()
+    } else {
+        format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            response_body.len()
+        )
     };
 
     let response = format!(
         "HTTP/1.1 {status}\r\n\
-         {location}\
-         Content-Type: application/json\r\n\
-         Content-Length: {}\r\n\
+         {extra}\
+         {content}\
          Access-Control-Allow-Origin: *\r\n\
          Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
          Access-Control-Allow-Headers: Content-Type\r\n\
          Connection: close\r\n\
          \r\n\
-         {}",
-        response_body.len(),
-        response_body,
+         {response_body}"
     );
 
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
+}
+
+/// A tag for a response body. The same body always gets the same tag.
+fn content_tag(body: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    body.hash(&mut hasher);
+    format!("\"{:016x}\"", hasher.finish())
 }
 
 fn route(method: &str, path: &str, body: &str, state: &AppState) -> (&'static str, String) {
@@ -1680,13 +1713,61 @@ mod tests {
 
     /// The whole response, status line and headers included.
     fn raw_request(addr: &str, path: &str) -> String {
+        raw_request_with(addr, path, "")
+    }
+
+    /// [`raw_request`] with extra header lines, each ending in `\r\n`.
+    fn raw_request_with(addr: &str, path: &str, headers: &str) -> String {
         let mut stream = std::net::TcpStream::connect(addr).unwrap();
         let request =
-            format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+            format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n{headers}Connection: close\r\n\r\n");
         stream.write_all(request.as_bytes()).unwrap();
         let mut response = String::new();
         stream.read_to_string(&mut response).unwrap();
         response
+    }
+
+    fn header_value(response: &str, name: &str) -> Option<String> {
+        let head = response.split("\r\n\r\n").next()?;
+        head.lines().find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            key.eq_ignore_ascii_case(name)
+                .then(|| value.trim().to_string())
+        })
+    }
+
+    /// The extension asks for the rules every two seconds (#57). Sending the
+    /// whole list each time was gigabytes a day over loopback for big lists.
+    #[test]
+    fn the_rules_go_out_again_only_once_they_have_changed() {
+        let mut list = focuser_common::types::BlockList::new("Focus");
+        list.websites
+            .push(focuser_common::types::WebsiteRule::domain("old.example"));
+        let list_id = list.id;
+        let addr = start(ctx_with_extension(move |db| {
+            db.create_block_list(&list).unwrap();
+        }));
+
+        let first = raw_request(&addr, "/api/rules");
+        assert!(first.starts_with("HTTP/1.1 200"), "{first}");
+        let tag = header_value(&first, "ETag").expect("the answer has an ETag");
+        assert_eq!(
+            header_value(&first, "Cache-Control").as_deref(),
+            Some("no-cache"),
+            "the browser must ask again each time, not reuse it unasked"
+        );
+
+        let same = raw_request_with(&addr, "/api/rules", &format!("If-None-Match: {tag}\r\n"));
+        assert!(same.starts_with("HTTP/1.1 304"), "{same}");
+        assert_eq!(same.split("\r\n\r\n").nth(1), Some(""), "a 304 has no body");
+
+        // A new rule is a new answer, with a new tag.
+        let body = serde_json::json!({"list_id": list_id, "domain": "new.example"}).to_string();
+        request(&addr, "POST", "/api/add-site", Some(&body));
+        let changed = raw_request_with(&addr, "/api/rules", &format!("If-None-Match: {tag}\r\n"));
+        assert!(changed.starts_with("HTTP/1.1 200"), "{changed}");
+        assert!(changed.contains("new.example"), "{changed}");
+        assert_ne!(header_value(&changed, "ETag"), Some(tag));
     }
 
     #[test]
