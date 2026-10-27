@@ -18,6 +18,10 @@ use crate::AppState;
 
 const HOSTS_BEGIN: &str = "# ──── BEGIN FOCUSER BLOCK ────";
 const HOSTS_END: &str = "# ──── END FOCUSER BLOCK ────";
+/// For whoever opens the file after Focuser went without cleaning up, for
+/// instance when an antivirus removed it (#54).
+const HOSTS_NOTE: &str =
+    "# Added by Focuser to block sites. If Focuser is gone, delete this block from BEGIN to END.";
 
 /// Runs the blocking loop in a background thread.
 /// Every 3 seconds: re-sync hosts file, check for blocked processes,
@@ -599,6 +603,8 @@ fn replace_section(content: &str, domains: &[String]) -> String {
         }
         result.push_str(HOSTS_BEGIN);
         result.push('\n');
+        result.push_str(HOSTS_NOTE);
+        result.push('\n');
         for domain in domains {
             result.push_str(&format!("127.0.0.1 {domain}\n"));
             result.push_str(&format!("::1 {domain}\n"));
@@ -636,6 +642,27 @@ fn flush_dns() {
 #[cfg(test)]
 mod tests {
     use super::is_browser_subprocess;
+
+    #[test]
+    fn the_hosts_block_says_how_to_remove_it_by_hand() {
+        let original = "127.0.0.1 localhost\n";
+        let blocked = replace_section(original, &["reddit.com".into()]);
+        let lines: Vec<&str> = blocked.lines().collect();
+        let begin = lines.iter().position(|l| *l == HOSTS_BEGIN).unwrap();
+        // Read by whoever opens the file after Focuser is gone without
+        // cleaning up, for instance after an antivirus removed it (#54).
+        assert!(
+            lines[begin + 1].starts_with("# ") && lines[begin + 1].contains("delete"),
+            "{blocked}"
+        );
+
+        assert_eq!(
+            replace_section(&blocked, &["reddit.com".into()]),
+            blocked,
+            "writing it again changes nothing"
+        );
+        assert_eq!(replace_section(&blocked, &[]), original);
+    }
 
     #[test]
     fn a_browser_main_process_is_not_a_subprocess() {

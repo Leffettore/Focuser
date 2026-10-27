@@ -90,6 +90,20 @@ fn main() {
         )
         .init();
 
+    // The uninstaller runs this before it removes the files. Without it every
+    // site blocked through the hosts file stayed blocked once Focuser was
+    // gone (#54). Before the database and the single-instance lock: nothing
+    // else of the app may start.
+    if std::env::args().any(|a| a == "--remove-hosts-blocks") {
+        std::process::exit(match blocker::remove_hosts_blocks() {
+            Ok(()) => 0,
+            Err(e) => {
+                warn!(error = %e, "Could not take Focuser's block out of the hosts file");
+                1
+            }
+        });
+    }
+
     info!("Focuser starting");
 
     #[cfg(target_os = "linux")]

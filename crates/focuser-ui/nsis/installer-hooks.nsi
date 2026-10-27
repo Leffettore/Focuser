@@ -1,7 +1,8 @@
 ; Focuser NSIS Installer Hooks
 ; 1. Creates a scheduled task to run Focuser at logon with highest privileges (no UAC prompt)
 ; 2. Registers the native messaging host for Chrome, Edge, and Firefox
-; 3. On uninstall, removes the data directory the bundle identifier does not cover
+; 3. On uninstall, takes Focuser's block out of the hosts file
+; 4. On uninstall, removes the data directory the bundle identifier does not cover
 
 !include "StrFunc.nsh"
 ${StrRep}
@@ -42,6 +43,21 @@ ${StrRep}
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  ; Take Focuser's block out of the hosts file, or every site it blocked stays
+  ; blocked once Focuser is gone (#54). Not on an update: the new copy puts it
+  ; straight back. Tauri closes the running app only after this hook, and a
+  ; running copy would write the block again, so close it first.
+  ${If} $UpdateMode <> 1
+    !insertmacro CheckIfAppIsRunning "$INSTDIR\focuser-ui.exe" "Focuser"
+    nsExec::ExecToLog '"$INSTDIR\focuser-ui.exe" --remove-hosts-blocks'
+    Pop $0
+    ${If} $0 != 0
+      ; A per-user install uninstalls without admin rights, and the hosts
+      ; file needs them. Ask once, for this one step.
+      ExecShellWait "runas" "$INSTDIR\focuser-ui.exe" "--remove-hosts-blocks" SW_HIDE
+    ${EndIf}
+  ${EndIf}
+
   ; Remove the scheduled task on uninstall
   nsExec::ExecToLog 'schtasks /delete /tn "Focuser" /f'
 
