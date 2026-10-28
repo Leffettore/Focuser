@@ -186,6 +186,9 @@ fn main() {
                 blocker::run_blocking_loop(blocker_state);
             });
 
+            let sync_state = Arc::clone(&state_for_blocker);
+            std::thread::spawn(move || blocker::run_sync_loop(sync_state));
+
             // Spawn extension API server
             let api_state = Arc::clone(&state_for_blocker);
             std::thread::spawn(move || {

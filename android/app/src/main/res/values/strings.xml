@@ -1,0 +1,3 @@
+<resources>
+    <string name="service_description">Reads the address bar of supported browsers and sends you to the home screen when a site on your Focuser block list is open during its scheduled hours.</string>
+</resources>

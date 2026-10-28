@@ -93,6 +93,16 @@ pub enum ConfigCmd {
     Export,
     /// Replace every block list with the contents of a file. `-` reads stdin.
     Import { path: std::path::PathBuf },
+    /// Convert a Cold Turkey .ctbbl export to a Focuser config on stdout.
+    /// Nothing is imported; feed the result to `config import`.
+    ConvertColdTurkey {
+        path: std::path::PathBuf,
+        /// Block to take (repeatable). Default: every block.
+        #[arg(long = "only")]
+        only: Vec<String>,
+    },
+    /// Fetch the config from `sync_url` and merge it now.
+    SyncNow,
     /// Delete every block list, rule, schedule, statistic and setting.
     Wipe {
         /// Required. Without it nothing is deleted.
@@ -602,6 +612,11 @@ impl TopLevel {
                 ConfigCmd::Import { path } => Command::ImportConfiguration {
                     json: read_source(&path)?,
                 },
+                ConfigCmd::ConvertColdTurkey { path, only } => Command::ConvertColdTurkey {
+                    json: read_source(&path)?,
+                    only,
+                },
+                ConfigCmd::SyncNow => Command::SyncNow,
                 ConfigCmd::Wipe { yes } => {
                     if !yes {
                         anyhow::bail!("refusing to wipe everything without --yes");

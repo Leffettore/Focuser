@@ -10,10 +10,12 @@
 //!
 //! See `internal-docs/tasks/2026-07-26-ui-revamp/02-command-core.md` for the design.
 
+pub mod coldturkey;
 pub mod command;
 pub mod context;
 pub mod error;
 pub mod execute;
+pub mod sync;
 
 pub use command::{Command, CommandResult};
 pub use context::{AppContext, NoopSync, PomodoroEvent, SystemSync};

@@ -291,6 +291,24 @@ pub enum Command {
     ImportConfiguration {
         json: String,
     },
+    /// Turn a Cold Turkey `.ctbbl` export into a Focuser configuration document
+    /// (returned as text, nothing is imported). `only` names the blocks to take;
+    /// empty means every block.
+    ConvertColdTurkey {
+        json: String,
+        only: Vec<String>,
+    },
+    /// Apply a configuration document fetched from the sync server: lists are
+    /// matched by id, new ones are added, unprotected ones are overwritten and
+    /// protected ones are left for the next round. Nothing is ever deleted.
+    /// Returns a one-line summary.
+    MergeConfiguration {
+        json: String,
+    },
+    /// Fetch the document from the configured `sync_url` and merge it, once.
+    /// The GUI polls without this (it would hold the engine lock during the
+    /// request); it exists for the CLI.
+    SyncNow,
     /// Delete block lists, rules, schedules, statistics and settings.
     DeleteAllData,
     /// Would this domain be blocked right now?

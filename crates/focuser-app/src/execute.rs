@@ -763,6 +763,10 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             Ok(CommandResult::Text(json))
         }
 
+        Command::ConvertColdTurkey { json, only } => Ok(CommandResult::Text(
+            crate::coldturkey::convert(&json, &only)?,
+        )),
+
         Command::ImportConfiguration { json } => {
             let document: ConfigDocument = serde_json::from_str(&json).map_err(|e| {
                 CommandError::Validation(format!("not a Focuser configuration file: {e}"))
@@ -802,6 +806,32 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             engine.refresh()?;
             ctx.sync_hosts(&engine);
             Ok(CommandResult::Count(document.block_lists.len() as u32))
+        }
+
+        Command::MergeConfiguration { json } => {
+            let summary = crate::sync::merge(&mut engine, &json)?;
+            engine.refresh()?;
+            ctx.sync_hosts(&engine);
+            Ok(CommandResult::Text(summary))
+        }
+
+        Command::SyncNow => {
+            let setting = |key| {
+                engine
+                    .db()
+                    .get_setting(key)
+                    .map(|v| v.filter(|v| !v.trim().is_empty()))
+            };
+            let url = setting(crate::sync::SETTING_URL)?.ok_or_else(|| {
+                CommandError::Validation("no sync_url set (`setting set sync_url <url>`)".into())
+            })?;
+            let token = setting(crate::sync::SETTING_TOKEN)?;
+            let json = crate::sync::fetch(&url, token.as_deref())
+                .map_err(|e| CommandError::Validation(format!("could not fetch {url}: {e}")))?;
+            let summary = crate::sync::merge(&mut engine, &json)?;
+            engine.refresh()?;
+            ctx.sync_hosts(&engine);
+            Ok(CommandResult::Text(summary))
         }
 
         Command::DeleteAllData => {
@@ -872,17 +902,17 @@ fn app_icons(targets: Vec<String>) -> Vec<AppIcon> {
 }
 
 /// Bumped only when the exported shape changes incompatibly.
-const CONFIG_FORMAT_VERSION: u32 = 1;
+pub(crate) const CONFIG_FORMAT_VERSION: u32 = 1;
 
 /// The exported/imported document. Typed rather than hand-built JSON so export
 /// and import can never disagree about the shape.
 #[derive(serde::Serialize, serde::Deserialize)]
-struct ConfigDocument {
-    version: u32,
+pub(crate) struct ConfigDocument {
+    pub(crate) version: u32,
     /// Only there so a human opening the file can tell what wrote it.
-    app: String,
-    exported_at: chrono::DateTime<chrono::Utc>,
-    block_lists: Vec<BlockList>,
+    pub(crate) app: String,
+    pub(crate) exported_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) block_lists: Vec<BlockList>,
 }
 
 /// A scheduled lock and a shared allowance both last for one scheduled block,
@@ -953,6 +983,8 @@ fn loosens_enforcement(engine: &BlockEngine, key: &str, value: &str) -> CommandO
                 .unwrap_or(DEFAULT_GRACE_PERIOD_SECS);
             value.parse::<u64>().map_or(true, |next| next > current)
         }
+        // Pointing sync somewhere else rewrites the lists on the next poll.
+        crate::sync::SETTING_URL | crate::sync::SETTING_TOKEN => true,
         _ => false,
     })
 }

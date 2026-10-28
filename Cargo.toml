@@ -28,11 +28,13 @@ thiserror = "2"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.32", features = ["bundled", "serde_json"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
 directories = "6"
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 glob-match = "0.2"
+# Config sync only talks plain HTTP over the tailnet, so no TLS stack.
+ureq = { version = "2", default-features = false }
 argon2 = "0.5"
 # Pulled in transitively by argon2; declared explicitly to turn on
 # `getrandom` so its re-exported `rand_core::OsRng` is available for

@@ -939,3 +939,33 @@ mod tests {
         assert!(cleared.contains(&(7, "bash".to_string())));
     }
 }
+
+/// Pulls the block lists from the sync server (settings `sync_url` and
+/// `sync_token`) every few minutes. Does nothing while no URL is set; a
+/// failed fetch leaves the lists as they are, so blocking carries on offline.
+pub fn run_sync_loop(state: Arc<AppState>) {
+    use focuser_app::sync::{SETTING_TOKEN, SETTING_URL, fetch};
+    use focuser_app::{Command, execute};
+
+    loop {
+        thread::sleep(Duration::from_secs(300));
+        let setting = |key: &str| {
+            state
+                .engine
+                .lock()
+                .ok()
+                .and_then(|e| e.db().get_setting(key).ok().flatten())
+                .filter(|v| !v.trim().is_empty())
+        };
+        let Some(url) = setting(SETTING_URL) else {
+            continue;
+        };
+        match fetch(&url, setting(SETTING_TOKEN).as_deref()) {
+            Ok(json) => match execute(&state, Command::MergeConfiguration { json }) {
+                Ok(result) => info!(?result, "Config sync"),
+                Err(e) => warn!(error = %e, "Config sync could not apply the document"),
+            },
+            Err(e) => warn!(error = %e, "Config sync could not reach the server"),
+        }
+    }
+}
