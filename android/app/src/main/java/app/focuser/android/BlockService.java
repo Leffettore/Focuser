@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** Watches supported browsers' address bars and sends the user home when a blocked site is open. */
 public final class BlockService extends AccessibilityService {
@@ -28,6 +29,13 @@ public final class BlockService extends AccessibilityService {
             "com.google.android.packageinstaller",
             "com.samsung.android.packageinstaller",
             "com.android.packageinstaller");
+
+    // Apps that stay open on the screens matching the pattern (any view id, description or text) and go home
+    // everywhere else. Facebook needs no entry: its messages live in Messenger, a separate app that is simply
+    // not blocked. ponytail: Instagram's view ids are unverified and change between releases; tune them with
+    // `adb logcat -s Focuser` after a block, which logs what was on screen.
+    private static final Map<String, Pattern> ALLOWED_SCREENS = Map.of(
+            "com.instagram.android", Pattern.compile("direct_thread|thread_composer|direct_inbox|inbox_refreshable"));
 
     private volatile Rules rules;
     private Thread syncThread;
@@ -76,6 +84,13 @@ public final class BlockService extends AccessibilityService {
             }
             return;
         }
+        String name = pkg.toString();
+        if (Sync.prefs(this).getStringSet(Sync.APPS_KEY, Set.of()).contains(name)
+                && current.anyActive(LocalDateTime.now())) {
+            Pattern allowed = ALLOWED_SCREENS.get(name);
+            if (allowed == null || !shows(root, allowed, 0)) performGlobalAction(GLOBAL_ACTION_HOME);
+            return;
+        }
         String barId = URL_BARS.get(pkg.toString());
         if (barId == null) return;
         List<AccessibilityNodeInfo> bars = root.findAccessibilityNodeInfosByViewId(barId);
@@ -83,6 +98,18 @@ public final class BlockService extends AccessibilityService {
         if (current.blocks(bars.get(0).getText().toString(), LocalDateTime.now())) {
             performGlobalAction(GLOBAL_ACTION_HOME);
         }
+    }
+
+    private static boolean shows(AccessibilityNodeInfo node, Pattern pattern, int depth) {
+        if (node == null || depth > 40) return false;
+        for (CharSequence label : new CharSequence[] {
+                node.getViewIdResourceName(), node.getContentDescription(), node.getText()}) {
+            if (label != null && pattern.matcher(label).find()) return true;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (shows(node.getChild(i), pattern, depth + 1)) return true;
+        }
+        return false;
     }
 
     @Override

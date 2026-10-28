@@ -1,7 +1,10 @@
 package app.focuser.android;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -14,6 +17,10 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * The desktop UI, served by the personal server and shown in a WebView. Editing there changes the
@@ -66,7 +73,38 @@ public class MainActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true);
         web.setWebViewClient(new WebViewClient());
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
+        Button apps = new Button(this);
+        apps.setText("Blocked apps on this device");
+        apps.setOnClickListener(v -> pickApps());
+        root.addView(apps);
         setContentView(root);
+    }
+
+    /** Apps are per device: the choice lives in this phone's prefs and follows the synced lists' schedules. */
+    private void pickApps() {
+        PackageManager pm = getPackageManager();
+        Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> found = pm.queryIntentActivities(launcher, 0);
+        found.removeIf(r -> r.activityInfo.packageName.equals(getPackageName()));
+        found.sort((a, b) -> a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));
+        Set<String> chosen = new HashSet<>(Sync.prefs(this).getStringSet(Sync.APPS_KEY, Set.of()));
+        String[] labels = new String[found.size()];
+        boolean[] checked = new boolean[found.size()];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = found.get(i).loadLabel(pm).toString();
+            checked[i] = chosen.contains(found.get(i).activityInfo.packageName);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Blocked apps on this device")
+                .setMultiChoiceItems(labels, checked, (d, which, on) -> {
+                    String name = found.get(which).activityInfo.packageName;
+                    if (on) chosen.add(name);
+                    else chosen.remove(name);
+                })
+                .setPositiveButton("Save", (d, w) ->
+                        Sync.prefs(this).edit().putStringSet(Sync.APPS_KEY, chosen).apply())
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     @Override

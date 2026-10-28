@@ -15,6 +15,8 @@ final class Sync {
     static final String PREFS = "focuser";
     static final String URL_KEY = "sync_url";
     static final String TOKEN_KEY = "sync_token";
+    /** Package names blocked on this device only; never part of the synced document. */
+    static final String APPS_KEY = "apps";
     static final String CONFIG_KEY = "config";
 
     private Sync() {}

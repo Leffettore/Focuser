@@ -49,4 +49,11 @@ public class RulesTest {
     public void normalizeStripsSchemeAndPrefix() {
         assertEquals("youtube.com/x", Rules.normalize("HTTPS://m.YouTube.com/x"));
     }
+
+    @Test
+    public void anyActiveFollowsTheSchedule() throws Exception {
+        Rules rules = new Rules(DOC);
+        assertTrue(rules.anyActive(MON_2200));
+        assertFalse(rules.anyActive(MON_1200));
+    }
 }

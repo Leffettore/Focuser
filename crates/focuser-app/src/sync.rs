@@ -3,6 +3,8 @@
 //! The server holds one [`ConfigDocument`](crate::execute) (what
 //! `ExportConfiguration` writes). Each device fetches it and merges it by list
 //! id. One-way on purpose: the server wins, so there is nothing to reconcile.
+//! Applications are the exception: each device keeps its own, since an app on
+//! one machine is not an app on another.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Duration;
@@ -59,6 +61,7 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
         let Some(existing) = existing else {
             let mut list = incoming;
             list.schedule_unlocked_until = None;
+            list.applications.clear();
             engine.db().create_block_list(&list)?;
             added += 1;
             continue;
@@ -74,6 +77,7 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
         list.protection = existing.protection.clone();
         list.schedule_unlocked_until = existing.schedule_unlocked_until;
         list.created_at = existing.created_at;
+        list.applications = existing.applications.clone();
         engine.db().update_block_list(&list)?;
         updated += 1;
     }
@@ -125,6 +129,27 @@ mod tests {
         engine.refresh().unwrap();
         assert_eq!(engine.block_lists().len(), 1);
         assert_eq!(engine.block_lists()[0].websites.len(), 1);
+    }
+
+    #[test]
+    fn keeps_each_devices_own_applications() {
+        use focuser_common::types::AppRule;
+        let mut engine = engine();
+        let mut list = BlockList::new("Distractions");
+        list.applications
+            .push(AppRule::executable("server-only.exe"));
+        merge(&mut engine, &doc(std::slice::from_ref(&list))).unwrap();
+        engine.refresh().unwrap();
+        assert!(engine.block_lists()[0].applications.is_empty());
+
+        let mut local = engine.block_lists()[0].clone();
+        local.applications.push(AppRule::executable("steam.exe"));
+        engine.db().update_block_list(&local).unwrap();
+        list.name = "Renamed".into();
+        merge(&mut engine, &doc(&[list])).unwrap();
+        engine.refresh().unwrap();
+        assert_eq!(engine.block_lists()[0].name, "Renamed");
+        assert_eq!(engine.block_lists()[0].applications.len(), 1);
     }
 
     #[test]

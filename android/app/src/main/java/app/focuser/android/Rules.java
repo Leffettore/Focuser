@@ -30,6 +30,15 @@ final class Rules {
         return false;
     }
 
+    /** Whether any enabled list is inside its hours; the device's own apps follow the lists' schedules. */
+    boolean anyActive(LocalDateTime now) {
+        for (int i = 0; i < lists.length(); i++) {
+            JSONObject list = lists.optJSONObject(i);
+            if (list != null && list.optBoolean("enabled") && scheduled(list, now)) return true;
+        }
+        return false;
+    }
+
     /** Whether a list that locks itself while scheduled is inside its hours, so Focuser itself must stay put. */
     boolean protectedNow(LocalDateTime now) {
         for (int i = 0; i < lists.length(); i++) {
