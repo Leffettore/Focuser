@@ -32,8 +32,8 @@ public final class BlockService extends AccessibilityService {
 
     // Apps that stay open on the screens matching the pattern (any view id, description or text) and go home
     // everywhere else. Facebook needs no entry: its messages live in Messenger, a separate app that is simply
-    // not blocked. ponytail: Instagram's view ids are unverified and change between releases; tune them with
-    // `adb logcat -s Focuser` after a block, which logs what was on screen.
+    // not blocked. ponytail: Instagram's view ids were checked on one release and may change; re-dump them with
+    // `adb shell uiautomator dump` when DMs stop opening.
     private static final Map<String, Pattern> ALLOWED_SCREENS = Map.of(
             "com.instagram.android", Pattern.compile("direct_thread|thread_composer|direct_inbox|inbox_refreshable"));
 
@@ -88,7 +88,12 @@ public final class BlockService extends AccessibilityService {
         if (Sync.prefs(this).getStringSet(Sync.APPS_KEY, Set.of()).contains(name)
                 && current.anyActive(LocalDateTime.now())) {
             Pattern allowed = ALLOWED_SCREENS.get(name);
-            if (allowed == null || !shows(root, allowed, 0)) performGlobalAction(GLOBAL_ACTION_HOME);
+            if (allowed == null || !shows(root, allowed, 0)) {
+                // Landing on the feed would leave no way into the DMs, so send the user to the DM tab if there is one.
+                List<AccessibilityNodeInfo> dm = allowed == null
+                        ? List.of() : root.findAccessibilityNodeInfosByViewId(name + ":id/direct_tab");
+                if (dm.isEmpty() || !click(dm.get(0))) performGlobalAction(GLOBAL_ACTION_HOME);
+            }
             return;
         }
         String barId = URL_BARS.get(pkg.toString());
@@ -98,6 +103,13 @@ public final class BlockService extends AccessibilityService {
         if (current.blocks(bars.get(0).getText().toString(), LocalDateTime.now())) {
             performGlobalAction(GLOBAL_ACTION_HOME);
         }
+    }
+
+    private static boolean click(AccessibilityNodeInfo node) {
+        for (AccessibilityNodeInfo n = node; n != null; n = n.getParent()) {
+            if (n.isClickable()) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        }
+        return false;
     }
 
     private static boolean shows(AccessibilityNodeInfo node, Pattern pattern, int depth) {
