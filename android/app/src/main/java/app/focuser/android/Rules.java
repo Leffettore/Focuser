@@ -30,6 +30,18 @@ final class Rules {
         return false;
     }
 
+    /** Whether a list that locks itself while scheduled is inside its hours, so Focuser itself must stay put. */
+    boolean protectedNow(LocalDateTime now) {
+        for (int i = 0; i < lists.length(); i++) {
+            JSONObject list = lists.optJSONObject(i);
+            if (list != null && list.optBoolean("enabled") && !list.isNull("scheduled_protection")
+                    && scheduled(list, now)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Lowercase, no scheme, no `www.`/`m.` prefix, so `https://m.YouTube.com/x` becomes `youtube.com/x`. */
     static String normalize(String address) {
         String s = address.trim().toLowerCase(Locale.ROOT).replaceFirst("^[a-z][a-z0-9+.-]*://", "");

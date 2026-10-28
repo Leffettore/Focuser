@@ -61,6 +61,20 @@ fn moment(text: &str) -> Result<(Weekday, NaiveTime), CommandError> {
     Ok((weekday, time))
 }
 
+/// The rule for one Cold Turkey exception. A bare YouTube channel name also
+/// gets its `@handle` form, which is the address YouTube redirects to.
+fn exceptions(name: &str, raw: &str) -> Vec<ExceptionRule> {
+    let mut rules = vec![exception(name, raw)];
+    let path = raw.strip_suffix('*').unwrap_or(raw);
+    if let Some(channel) = path.strip_prefix("youtube.com/")
+        && !channel.is_empty()
+        && !channel.contains(['/', '?', '*', '@'])
+    {
+        rules.push(exception(name, &format!("youtube.com/@{channel}*")));
+    }
+    rules
+}
+
 fn exception(name: &str, raw: &str) -> ExceptionRule {
     let exception_type = if raw == "file://*.*" {
         ExceptionType::LocalFiles
@@ -108,7 +122,11 @@ fn convert_block(name: &str, ct: &CtBlock) -> Result<BlockList, CommandError> {
             ..AppRule::executable(a.strip_prefix("file:").unwrap_or(a))
         })
         .collect();
-    list.exceptions = ct.exceptions.iter().map(|e| exception(name, e)).collect();
+    list.exceptions = ct
+        .exceptions
+        .iter()
+        .flat_map(|e| exceptions(name, e))
+        .collect();
     let time_slots = ct
         .schedule
         .iter()
@@ -189,8 +207,9 @@ mod tests {
         let kinds: Vec<_> = l.exceptions.iter().map(|e| &e.exception_type).collect();
         assert!(matches!(kinds[0], ExceptionType::LocalFiles));
         assert!(matches!(kinds[1], ExceptionType::UrlPath(p) if p == "youtube.com/carmyspecial"));
-        assert!(matches!(kinds[2], ExceptionType::Wildcard(_)));
-        assert!(matches!(kinds[3], ExceptionType::Domain(d) if d == "example.org"));
+        assert!(matches!(kinds[2], ExceptionType::UrlPath(p) if p == "youtube.com/@carmyspecial"));
+        assert!(matches!(kinds[3], ExceptionType::Wildcard(_)));
+        assert!(matches!(kinds[4], ExceptionType::Domain(d) if d == "example.org"));
         let slots = &l.schedule.as_ref().unwrap().time_slots;
         // Day 0 is Sunday; the Sunday-night slot wraps into Monday.
         assert_eq!(slots[0].day, Weekday::Sun);

@@ -38,6 +38,14 @@ public class RulesTest {
     }
 
     @Test
+    public void protectedOnlyWhenTheListLocksItselfInsideItsHours() throws Exception {
+        assertFalse(new Rules(DOC).protectedNow(MON_2200));
+        Rules locked = new Rules(DOC.replace("\"enabled\":true,\"websites\"", "\"enabled\":true,\"scheduled_protection\":{\"lock\":null},\"websites\""));
+        assertTrue(locked.protectedNow(MON_2200));
+        assertFalse(locked.protectedNow(MON_1200));
+    }
+
+    @Test
     public void normalizeStripsSchemeAndPrefix() {
         assertEquals("youtube.com/x", Rules.normalize("HTTPS://m.YouTube.com/x"));
     }

@@ -7,6 +7,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Watches supported browsers' address bars and sends the user home when a blocked site is open. */
 public final class BlockService extends AccessibilityService {
@@ -20,6 +21,13 @@ public final class BlockService extends AccessibilityService {
             "com.microsoft.emmx", "com.microsoft.emmx:id/url_bar",
             "org.mozilla.firefox", "org.mozilla.firefox:id/mozac_browser_toolbar_url_view",
             "com.sec.android.app.sbrowser", "com.sec.android.app.sbrowser:id/location_bar_edit_text");
+
+    // Screens where Focuser can be uninstalled, force-stopped or have its accessibility access removed.
+    private static final Set<String> GUARDED = Set.of(
+            "com.android.settings",
+            "com.google.android.packageinstaller",
+            "com.samsung.android.packageinstaller",
+            "com.android.packageinstaller");
 
     private volatile Rules rules;
     private Thread syncThread;
@@ -59,9 +67,17 @@ public final class BlockService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         Rules current = rules;
         CharSequence pkg = event.getPackageName();
-        String barId = pkg == null ? null : URL_BARS.get(pkg.toString());
         AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (current == null || barId == null || root == null) return;
+        if (current == null || pkg == null || root == null) return;
+        if (GUARDED.contains(pkg.toString())) {
+            // ponytail: matches the app's label anywhere on screen, so it also fires on the Settings app list. Narrow it if that annoys.
+            if (current.protectedNow(LocalDateTime.now()) && !root.findAccessibilityNodeInfosByText("Focuser").isEmpty()) {
+                performGlobalAction(GLOBAL_ACTION_HOME);
+            }
+            return;
+        }
+        String barId = URL_BARS.get(pkg.toString());
+        if (barId == null) return;
         List<AccessibilityNodeInfo> bars = root.findAccessibilityNodeInfosByViewId(barId);
         if (bars.isEmpty() || bars.get(0).getText() == null) return;
         if (current.blocks(bars.get(0).getText().toString(), LocalDateTime.now())) {
