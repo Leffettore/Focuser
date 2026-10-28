@@ -1,5 +1,5 @@
 import { AppWindow, FolderOpen, Plus } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ListPicker, resolveSelected } from "@/components/list-picker";
 import { RuleTable } from "@/components/rule-table";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,15 @@ import { Page } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
 import { useAddAppRule, useAppIcons, useBlockLists, useRemoveAppRule } from "@/lib/commands";
 import { APP_KINDS, type AppKind, appRule, describeApp } from "@/lib/match-types";
-import { isTauri, pickApplication } from "@/lib/native";
+import {
+  DEVICE_APPS_EVENT,
+  deviceApps,
+  isAndroidApp,
+  isTauri,
+  pickApplication,
+  pickDeviceApps,
+  removeDeviceApp,
+} from "@/lib/native";
 import { m } from "@/paraglide/messages.js";
 
 /**
@@ -63,6 +71,51 @@ function appKindOptions() {
 }
 
 export function Apps() {
+  return isAndroidApp() ? <DeviceApps /> : <ListApps />;
+}
+
+/** The phone's own apps: they live on the device, not in the synced lists. */
+function DeviceApps() {
+  const [apps, setApps] = useState(deviceApps);
+  useEffect(() => {
+    const refresh = () => setApps(deviceApps());
+    window.addEventListener(DEVICE_APPS_EVENT, refresh);
+    return () => window.removeEventListener(DEVICE_APPS_EVENT, refresh);
+  }, []);
+
+  return (
+    <Page>
+      <PageHeader
+        title={m.apps_title()}
+        description={m.apps_description()}
+        actions={
+          <Button icon={<Plus />} onClick={pickDeviceApps}>
+            {m.apps_add()}
+          </Button>
+        }
+      />
+      {apps.length === 0 ? (
+        <EmptyState icon={<AppWindow />} title={m.apps_empty_title()} />
+      ) : (
+        <RuleTable
+          rows={apps.map((a) => ({
+            id: a.id,
+            kind: "BundleId",
+            label: m.apps_kind_bundle_id(),
+            value: a.label,
+          }))}
+          onRemove={(id) => {
+            removeDeviceApp(id);
+            setApps(deviceApps());
+          }}
+          noun={m.noun_application()}
+        />
+      )}
+    </Page>
+  );
+}
+
+function ListApps() {
   const lists = useBlockLists();
   const [rawSelected, setSelected] = useState("");
   const [value, setValue] = useState("");

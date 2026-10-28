@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
@@ -21,6 +22,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * The desktop UI, served by the personal server and shown in a WebView. Editing there changes the
@@ -72,12 +76,44 @@ public class MainActivity extends Activity {
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         web.setWebViewClient(new WebViewClient());
+        web.addJavascriptInterface(new Bridge(), "FocuserAndroid");
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
-        Button apps = new Button(this);
-        apps.setText("Blocked apps on this device");
-        apps.setOnClickListener(v -> pickApps());
-        root.addView(apps);
         setContentView(root);
+    }
+
+    /** What the page's Applications screen calls: the phone's own blocked apps, never the server's. */
+    private final class Bridge {
+        @JavascriptInterface
+        public String blockedApps() {
+            JSONArray out = new JSONArray();
+            PackageManager pm = getPackageManager();
+            for (String name : Sync.prefs(MainActivity.this).getStringSet(Sync.APPS_KEY, Set.of())) {
+                String label = name;
+                try {
+                    label = pm.getApplicationLabel(pm.getApplicationInfo(name, 0)).toString();
+                } catch (PackageManager.NameNotFoundException ignored) {
+                    // uninstalled since: keep the package name so it can still be removed
+                }
+                try {
+                    out.put(new JSONObject().put("id", name).put("label", label));
+                } catch (JSONException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+            return out.toString();
+        }
+
+        @JavascriptInterface
+        public void removeApp(String id) {
+            Set<String> chosen = new HashSet<>(Sync.prefs(MainActivity.this).getStringSet(Sync.APPS_KEY, Set.of()));
+            chosen.remove(id);
+            Sync.prefs(MainActivity.this).edit().putStringSet(Sync.APPS_KEY, chosen).apply();
+        }
+
+        @JavascriptInterface
+        public void pickApps() {
+            runOnUiThread(MainActivity.this::pickApps);
+        }
     }
 
     /** Apps are per device: the choice lives in this phone's prefs and follows the synced lists' schedules. */
@@ -101,8 +137,10 @@ public class MainActivity extends Activity {
                     if (on) chosen.add(name);
                     else chosen.remove(name);
                 })
-                .setPositiveButton("Save", (d, w) ->
-                        Sync.prefs(this).edit().putStringSet(Sync.APPS_KEY, chosen).apply())
+                .setPositiveButton("Save", (d, w) -> {
+                    Sync.prefs(this).edit().putStringSet(Sync.APPS_KEY, chosen).apply();
+                    web.evaluateJavascript("window.dispatchEvent(new Event('focuser-apps'))", null);
+                })
                 .setNegativeButton("Cancel", null)
                 .show();
     }

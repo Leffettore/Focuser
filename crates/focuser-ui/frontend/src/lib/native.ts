@@ -53,3 +53,31 @@ export function checkForUpdate(): Promise<UpdateCheck> {
 export function installUpdate(): Promise<void> {
   return invoke("do_update");
 }
+
+/**
+ * The Android app injects this into its WebView: blocked apps are per device,
+ * so the phone keeps them itself and the page asks rather than the server.
+ */
+interface AndroidBridge {
+  blockedApps(): string;
+  removeApp(id: string): void;
+  pickApps(): void;
+}
+
+export interface DeviceApp {
+  id: string;
+  label: string;
+}
+
+/** Fired by the Android app after its app picker saves. */
+export const DEVICE_APPS_EVENT = "focuser-apps";
+
+function androidBridge(): AndroidBridge | undefined {
+  return (window as unknown as { FocuserAndroid?: AndroidBridge }).FocuserAndroid;
+}
+
+export const isAndroidApp = () => androidBridge() !== undefined;
+
+export const deviceApps = (): DeviceApp[] => JSON.parse(androidBridge()?.blockedApps() ?? "[]");
+export const removeDeviceApp = (id: string) => androidBridge()?.removeApp(id);
+export const pickDeviceApps = () => androidBridge()?.pickApps();
