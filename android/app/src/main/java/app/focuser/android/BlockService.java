@@ -30,7 +30,7 @@ public final class BlockService extends AccessibilityService {
             "com.samsung.android.packageinstaller",
             "com.android.packageinstaller");
 
-    // Apps that stay open on the screens matching the pattern (any view id, description or text) and go home
+    // Apps that stay open on the screens matching the pattern (any visible view id, description or text) and go home
     // everywhere else. Facebook needs no entry: its messages live in Messenger, a separate app that is simply
     // not blocked. ponytail: Instagram's view ids were checked on one release and may change; re-dump them with
     // `adb shell uiautomator dump` when DMs stop opening.
@@ -92,7 +92,8 @@ public final class BlockService extends AccessibilityService {
                 // Landing on the feed would leave no way into the DMs, so send the user to the DM tab if there is one.
                 List<AccessibilityNodeInfo> dm = allowed == null
                         ? List.of() : root.findAccessibilityNodeInfosByViewId(name + ":id/direct_tab");
-                if (dm.isEmpty() || !click(dm.get(0))) performGlobalAction(GLOBAL_ACTION_HOME);
+                boolean clicked = !dm.isEmpty() && click(dm.get(0));
+                if (!clicked) performGlobalAction(GLOBAL_ACTION_HOME);
             }
             return;
         }
@@ -116,7 +117,7 @@ public final class BlockService extends AccessibilityService {
         if (node == null || depth > 40) return false;
         for (CharSequence label : new CharSequence[] {
                 node.getViewIdResourceName(), node.getContentDescription(), node.getText()}) {
-            if (label != null && pattern.matcher(label).find()) return true;
+            if (label != null && node.isVisibleToUser() && pattern.matcher(label).find()) return true;
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             if (shows(node.getChild(i), pattern, depth + 1)) return true;
