@@ -42,7 +42,7 @@ export function AppLayout() {
     <div className="flex h-screen flex-col overflow-hidden bg-deep">
       <TitleBar />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col-reverse md:flex-row">
         <Sidebar />
         <main className="app-canvas min-w-0 flex-1 overflow-y-auto bg-background">
           <BlockingHealthBanner />
@@ -57,11 +57,11 @@ function Sidebar() {
   return (
     <nav
       aria-label={m.nav_landmark()}
-      className="glass flex w-56 shrink-0 flex-col border-border/60 border-r p-3"
+      className="glass flex shrink-0 border-border/60 border-t p-1 md:w-56 md:flex-col md:border-t-0 md:border-r md:p-3"
     >
       <Brand />
 
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-1 justify-between gap-0.5 md:flex-none md:flex-col md:justify-start">
         {NAV.map(({ to, label, icon: Icon, ...rest }) => (
           <NavLink
             key={to}
@@ -69,7 +69,7 @@ function Sidebar() {
             end={"end" in rest ? rest.end : undefined}
             className={({ isActive }) =>
               cn(
-                "group relative flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-sm",
+                "group relative flex items-center justify-center gap-3 rounded-lg p-2.5 font-medium text-sm md:justify-start md:px-3 md:py-2",
                 "transition-colors duration-150",
                 isActive
                   ? "bg-primary/12 text-foreground"
@@ -86,7 +86,7 @@ function Sidebar() {
                 <span
                   aria-hidden
                   className={cn(
-                    "-translate-y-1/2 absolute top-1/2 left-0 w-[3px] rounded-r-full bg-primary",
+                    "-translate-y-1/2 absolute top-1/2 left-0 hidden w-[3px] md:block rounded-r-full bg-primary",
                     "transition-all duration-200",
                     isActive ? "h-5 opacity-100" : "h-0 opacity-0",
                   )}
@@ -98,7 +98,7 @@ function Sidebar() {
                     isActive ? "text-primary" : "text-faint-foreground group-hover:text-foreground",
                   )}
                 />
-                {label()}
+                <span className="sr-only md:not-sr-only">{label()}</span>
               </>
             )}
           </NavLink>
@@ -106,7 +106,7 @@ function Sidebar() {
       </div>
 
       {/* `mt-auto` on the group, not each child, or only the first moves. */}
-      <div className="mt-auto flex flex-col gap-2 pt-3">
+      <div className="mt-auto hidden flex-col gap-2 pt-3 md:flex">
         <UpdatePill />
         <SessionPill />
       </div>
@@ -116,7 +116,7 @@ function Sidebar() {
 
 function Brand() {
   return (
-    <div className="mb-5 flex items-center gap-2.5 px-2 py-3">
+    <div className="mb-5 hidden items-center gap-2.5 px-2 py-3 md:flex">
       <AppIcon className="size-8 rounded-lg" />
       <span className="font-semibold text-base text-foreground tracking-tight">Focuser</span>
     </div>

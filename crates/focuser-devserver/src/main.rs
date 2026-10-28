@@ -20,11 +20,11 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use clap::Parser;
-use focuser_app::{AppContext, Command, execute};
+use focuser_app::{AppContext, Command, CommandResult, execute};
 use focuser_core::{BlockEngine, Database};
 use tracing::{Level, error, info, warn};
 
@@ -42,9 +42,19 @@ const DEV_ORIGIN: &str = "http://localhost:1420";
     about = "Dev-only HTTP bridge to the Focuser command core"
 )]
 struct Cli {
-    /// Port to listen on (loopback only).
+    /// Port to listen on.
     #[arg(long, default_value_t = DEFAULT_PORT)]
     port: u16,
+
+    /// Address to listen on. Loopback unless told otherwise; there is no
+    /// authentication, so only widen it to a network you trust (a tailnet).
+    #[arg(long, default_value = "127.0.0.1")]
+    bind: String,
+
+    /// Serve the built frontend (`frontend/dist`) from this folder, so one
+    /// address gives the UI, `/command` and `/config.json`.
+    #[arg(long)]
+    static_dir: Option<PathBuf>,
 
     /// SQLite file to use. Defaults to a throwaway dev database so testing
     /// never touches real block lists.
@@ -84,7 +94,8 @@ fn main() {
     // system hosts file as a side effect of a UI click.
     let ctx = Arc::new(AppContext::new_headless(engine));
 
-    let addr = format!("127.0.0.1:{}", cli.port);
+    let addr = format!("{}:{}", cli.bind, cli.port);
+    let static_dir = cli.static_dir;
     let listener = TcpListener::bind(&addr).unwrap_or_else(|e| {
         panic!("cannot bind {addr}: {e}");
     });
@@ -95,8 +106,9 @@ fn main() {
         match stream {
             Ok(stream) => {
                 let ctx = Arc::clone(&ctx);
+                let static_dir = static_dir.clone();
                 std::thread::spawn(move || {
-                    if let Err(e) = handle(stream, &ctx) {
+                    if let Err(e) = handle(stream, &ctx, static_dir.as_deref()) {
                         warn!(error = %e, "request failed");
                     }
                 });
@@ -157,7 +169,11 @@ fn seed(db: &Database) -> focuser_common::Result<()> {
     Ok(())
 }
 
-fn handle(mut stream: TcpStream, ctx: &AppContext) -> std::io::Result<()> {
+fn handle(
+    mut stream: TcpStream,
+    ctx: &AppContext,
+    static_dir: Option<&Path>,
+) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
 
     let mut request_line = String::new();
@@ -194,7 +210,7 @@ fn handle(mut stream: TcpStream, ctx: &AppContext) -> std::io::Result<()> {
         ("GET", "/health") => respond(
             &mut stream,
             200,
-            &serde_json::json!({ "ok": true }).to_string(),
+            serde_json::json!({ "ok": true }).to_string(),
             Some("application/json"),
         ),
 
@@ -206,10 +222,26 @@ fn handle(mut stream: TcpStream, ctx: &AppContext) -> std::io::Result<()> {
             respond(&mut stream, status, &payload, Some("application/json"))
         }
 
+        // What every Focuser install and the phone pull: the lists as they
+        // stand now, in the same document `config export` writes.
+        ("GET", "/config.json") => {
+            if let Ok(mut engine) = ctx.engine.lock() {
+                let _ = engine.refresh();
+            }
+            match execute(ctx, Command::ExportConfiguration) {
+                Ok(CommandResult::Text(json)) => {
+                    respond(&mut stream, 200, json.as_bytes(), Some("application/json"))
+                }
+                _ => respond(&mut stream, 500, b"{}", Some("application/json")),
+            }
+        }
+
+        ("GET", _) if static_dir.is_some() => serve_static(&mut stream, static_dir, &path),
+
         _ => respond(
             &mut stream,
             404,
-            &serde_json::json!({ "error": "not found" }).to_string(),
+            serde_json::json!({ "error": "not found" }).to_string(),
             Some("application/json"),
         ),
     }
@@ -265,9 +297,10 @@ fn run_command(ctx: &AppContext, body: &[u8]) -> (u16, String) {
 fn respond(
     stream: &mut TcpStream,
     status: u16,
-    body: &str,
+    body: impl AsRef<[u8]>,
     content_type: Option<&str>,
 ) -> std::io::Result<()> {
+    let body = body.as_ref();
     let reason = match status {
         200 => "OK",
         204 => "No Content",
@@ -290,6 +323,42 @@ fn respond(
     head.push_str("Connection: close\r\n\r\n");
 
     stream.write_all(head.as_bytes())?;
-    stream.write_all(body.as_bytes())?;
+    stream.write_all(body)?;
     stream.flush()
+}
+
+/// A file from the built frontend. Paths that name no file (client-side routes)
+/// get `index.html`, as a single-page app expects.
+fn serve_static(stream: &mut TcpStream, dir: Option<&Path>, path: &str) -> std::io::Result<()> {
+    let Some(dir) = dir else {
+        return respond(stream, 404, b"", None);
+    };
+    let rel = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or("/")
+        .trim_start_matches('/');
+    // Every component must be a plain name: no `..`, no absolute path.
+    let plain = Path::new(rel)
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)));
+    let mut file = dir.join(if rel.is_empty() { "index.html" } else { rel });
+    if !plain || !file.is_file() {
+        file = dir.join("index.html");
+    }
+    let Ok(bytes) = std::fs::read(&file) else {
+        return respond(stream, 404, b"", None);
+    };
+    let kind = match file.extension().and_then(|e| e.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") => "text/javascript",
+        Some("css") => "text/css",
+        Some("json") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("woff2") => "font/woff2",
+        Some("wav") => "audio/wav",
+        _ => "application/octet-stream",
+    };
+    respond(stream, 200, bytes, Some(kind))
 }
