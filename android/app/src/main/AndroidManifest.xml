@@ -5,7 +5,10 @@
     <!-- The sync URL is plain HTTP on the tailnet (see the Cold Turkey sync plan). -->
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="Focuser"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:usesCleartextTraffic="true">
 
         <activity

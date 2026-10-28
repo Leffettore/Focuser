@@ -23,6 +23,16 @@ final class Sync {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
+    static String blockedKey() {
+        return "blocked_" + java.time.LocalDate.now();
+    }
+
+    /** Counts a turned-away page for today's dashboard. Only the service writes it, from one thread. */
+    static void countBlock(Context context) {
+        SharedPreferences prefs = prefs(context);
+        prefs.edit().putInt(blockedKey(), prefs.getInt(blockedKey(), 0) + 1).apply();
+    }
+
     /** Fetches, checks the body parses as a config, then stores it. Throws on any failure so the old copy stays. */
     static void run(Context context) throws IOException, JSONException {
         SharedPreferences prefs = prefs(context);

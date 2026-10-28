@@ -3,6 +3,8 @@ package app.focuser.android;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import org.json.JSONArray;
@@ -28,6 +30,33 @@ final class Rules {
             }
         }
         return false;
+    }
+
+    /** One block list as the dashboard shows it. */
+    static final class ListInfo {
+        String name;
+        boolean enabled, scheduled, active, locked;
+        int sites, apps;
+    }
+
+    List<ListInfo> lists(LocalDateTime now) {
+        List<ListInfo> out = new ArrayList<>();
+        for (int i = 0; i < lists.length(); i++) {
+            JSONObject list = lists.optJSONObject(i);
+            if (list == null) continue;
+            ListInfo info = new ListInfo();
+            info.name = list.optString("name");
+            info.enabled = list.optBoolean("enabled");
+            JSONObject schedule = list.optJSONObject("schedule");
+            JSONArray slots = schedule == null ? null : schedule.optJSONArray("time_slots");
+            info.scheduled = schedule != null && schedule.optBoolean("enabled") && slots != null && slots.length() > 0;
+            info.active = info.enabled && scheduled(list, now);
+            info.locked = info.active && !list.isNull("scheduled_protection");
+            info.sites = list.optJSONArray("websites") == null ? 0 : list.optJSONArray("websites").length();
+            info.apps = list.optJSONArray("applications") == null ? 0 : list.optJSONArray("applications").length();
+            out.add(info);
+        }
+        return out;
     }
 
     /** Whether a list that locks itself while scheduled is inside its hours, so Focuser itself must stay put. */

@@ -82,6 +82,7 @@ public final class BlockService extends AccessibilityService {
         if (bars.isEmpty() || bars.get(0).getText() == null) return;
         if (current.blocks(bars.get(0).getText().toString(), LocalDateTime.now())) {
             performGlobalAction(GLOBAL_ACTION_HOME);
+            Sync.countBlock(this);
         }
     }
 
