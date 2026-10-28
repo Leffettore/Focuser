@@ -53,7 +53,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="mb-7 flex items-start justify-between gap-4">
+    <header className="mb-7 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="min-w-0">
         <h1 className="font-semibold text-[1.7rem] text-foreground leading-tight tracking-tight">
           {title}
