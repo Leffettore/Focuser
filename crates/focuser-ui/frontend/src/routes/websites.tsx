@@ -208,7 +208,7 @@ function BlockedTab({
               onChange={(e) => setValue(e.target.value)}
               placeholder={help.placeholder}
               aria-label={m.websites_value_label()}
-              className="max-w-sm flex-1"
+              className="min-w-40 max-w-sm flex-1"
             />
           )}
           {catchAll ? (
@@ -290,7 +290,7 @@ function ExceptionsTab({
             onChange={(e) => setValue(e.target.value)}
             placeholder="docs.example.com"
             aria-label={m.exceptions_value_label()}
-            className="max-w-sm flex-1"
+            className="min-w-40 max-w-sm flex-1"
           />
           <Button type="submit" icon={<Plus />} disabled={!value.trim() || add.isPending}>
             {m.exceptions_allow()}

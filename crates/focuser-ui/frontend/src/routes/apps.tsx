@@ -180,7 +180,7 @@ function ListApps() {
                   onChange={(e) => setValue(e.target.value)}
                   placeholder={PLACEHOLDERS[kind]}
                   aria-label={m.apps_value_label()}
-                  className="max-w-sm flex-1"
+                  className="min-w-40 max-w-sm flex-1"
                 />
                 <Button type="submit" icon={<Plus />} disabled={!value.trim() || add.isPending}>
                   {m.apps_add()}
