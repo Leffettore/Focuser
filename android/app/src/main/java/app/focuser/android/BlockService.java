@@ -35,7 +35,7 @@ public final class BlockService extends AccessibilityService {
     // not blocked. ponytail: Instagram's view ids were checked on one release and may change; re-dump them with
     // `adb shell uiautomator dump` when DMs stop opening.
     private static final Map<String, Pattern> ALLOWED_SCREENS = Map.of(
-            "com.instagram.android", Pattern.compile("direct_thread|thread_composer|direct_inbox|inbox_refreshable"));
+            "com.instagram.android", Pattern.compile("direct_thread|thread_composer|direct_inbox|inbox_refreshable|voice_message|thread_fragment|message_list|message_composer"));
 
     private volatile Rules rules;
     private Thread syncThread;
