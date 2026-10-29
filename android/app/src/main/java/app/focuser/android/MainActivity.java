@@ -5,10 +5,19 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ImageSpan;
+import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.JavascriptInterface;
@@ -21,6 +30,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -133,13 +143,15 @@ public class MainActivity extends Activity {
             PackageManager pm = getPackageManager();
             for (String name : Sync.prefs(MainActivity.this).getStringSet(Sync.APPS_KEY, Set.of())) {
                 String label = name;
+                String icon = null;
                 try {
                     label = pm.getApplicationLabel(pm.getApplicationInfo(name, 0)).toString();
+                    icon = dataUrl(pm.getApplicationIcon(name));
                 } catch (PackageManager.NameNotFoundException ignored) {
                     // uninstalled since: keep the package name so it can still be removed
                 }
                 try {
-                    out.put(new JSONObject().put("id", name).put("label", label));
+                    out.put(new JSONObject().put("id", name).put("label", label).putOpt("icon", icon));
                 } catch (JSONException e) {
                     throw new IllegalStateException(e);
                 }
@@ -188,10 +200,16 @@ public class MainActivity extends Activity {
         found.removeIf(r -> r.activityInfo.packageName.equals(getPackageName()));
         found.sort((a, b) -> a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));
         Set<String> chosen = new HashSet<>(Sync.prefs(this).getStringSet(Sync.APPS_KEY, Set.of()));
-        String[] labels = new String[found.size()];
+        CharSequence[] labels = new CharSequence[found.size()];
         boolean[] checked = new boolean[found.size()];
+        int size = dp(32);
         for (int i = 0; i < labels.length; i++) {
-            labels[i] = found.get(i).loadLabel(pm).toString();
+            // The icon rides in the label as a span: the dialog's own rows already put the checkbox at the start.
+            Drawable icon = found.get(i).loadIcon(pm);
+            icon.setBounds(0, 0, size, size);
+            SpannableString label = new SpannableString("  " + found.get(i).loadLabel(pm));
+            label.setSpan(new CenteredIcon(icon), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            labels[i] = label;
             checked[i] = chosen.contains(found.get(i).activityInfo.packageName);
         }
         new AlertDialog.Builder(this)
@@ -254,6 +272,45 @@ public class MainActivity extends Activity {
     private boolean serviceOn() {
         String on = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         return on != null && on.contains(getPackageName() + "/");
+    }
+
+    /** An icon centred on the text: ImageSpan grows the line only upwards, which leaves the label sitting low. */
+    private static final class CenteredIcon extends ImageSpan {
+        CenteredIcon(Drawable icon) {
+            super(icon);
+        }
+
+        @Override
+        public int getSize(Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
+            Rect bounds = getDrawable().getBounds();
+            if (fm != null) {
+                Paint.FontMetricsInt font = paint.getFontMetricsInt();
+                int middle = (font.ascent + font.descent) / 2;
+                fm.ascent = fm.top = Math.min(font.ascent, middle - bounds.height() / 2);
+                fm.descent = fm.bottom = Math.max(font.descent, middle + bounds.height() / 2);
+            }
+            return bounds.right;
+        }
+
+        @Override
+        public void draw(Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom,
+                Paint paint) {
+            Paint.FontMetricsInt font = paint.getFontMetricsInt();
+            canvas.save();
+            canvas.translate(x, y + (font.ascent + font.descent) / 2f - getDrawable().getBounds().height() / 2f);
+            getDrawable().draw(canvas);
+            canvas.restore();
+        }
+    }
+
+    /** The launcher icon as a PNG the page can show; drawn onto a bitmap since adaptive icons are not bitmaps. */
+    private static String dataUrl(Drawable icon) {
+        Bitmap bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
+        icon.setBounds(0, 0, 96, 96);
+        icon.draw(new Canvas(bitmap));
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, png);
+        return "data:image/png;base64," + Base64.encodeToString(png.toByteArray(), Base64.NO_WRAP);
     }
 
     private int dp(int v) {

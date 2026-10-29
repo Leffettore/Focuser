@@ -104,6 +104,7 @@ function DeviceApps() {
             label: m.apps_kind_bundle_id(),
             value: a.label,
           }))}
+          icons={new Map(apps.map((a) => [a.label, a.icon ?? null]))}
           onRemove={(id) => {
             removeDeviceApp(id);
             setApps(deviceApps());

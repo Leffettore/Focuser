@@ -67,6 +67,8 @@ interface AndroidBridge {
 export interface DeviceApp {
   id: string;
   label: string;
+  /** The launcher icon as a data URL; missing once the app is uninstalled. */
+  icon?: string;
 }
 
 /** Fired by the Android app after its app picker saves. */
