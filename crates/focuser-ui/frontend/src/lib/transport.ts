@@ -49,7 +49,47 @@ export const transportKind: "tauri" | "devserver" = isTauri() ? "tauri" : "devse
  * @throws {CommandError} when the backend rejects the command.
  */
 export async function send<TResult>(command: unknown): Promise<TResult> {
-  return isTauri() ? sendViaTauri<TResult>(command) : sendViaHttp<TResult>(command);
+  if (isTauri()) return sendViaTauri<TResult>(command);
+  return typeof androidBridge()?.command === "function" ? sendViaAndroid<TResult>(command) : sendViaHttp<TResult>(command);
+}
+
+interface AndroidCommandBridge {
+  command(id: number, json: string): void;
+}
+
+const androidBridge = () =>
+  (window as unknown as { FocuserAndroid?: AndroidCommandBridge }).FocuserAndroid;
+
+const pending = new Map<number, (status: number, body: string) => void>();
+let nextId = 0;
+
+/** The Android app answers here once its request to the server (or its saved copy) is ready. */
+(window as unknown as { __focuserCommand: typeof answer }).__focuserCommand = answer;
+function answer(id: number, status: number, body: string) {
+  pending.get(id)?.(status, body);
+  pending.delete(id);
+}
+
+/** The phone makes the request itself, so it can fall back to its last saved answer when offline. */
+function sendViaAndroid<TResult>(command: unknown): Promise<TResult> {
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, (status, body) => {
+      if (status === 0) {
+        reject(
+          new CommandError({
+            code: "offline",
+            message: "The server can't be reached. Turn Tailscale on to make changes.",
+          }),
+        );
+      } else if (status >= 400) {
+        reject(toCommandError(JSON.parse(body)));
+      } else {
+        resolve(JSON.parse(body) as TResult);
+      }
+    });
+    androidBridge()?.command(id, JSON.stringify(command));
+  });
 }
 
 async function sendViaTauri<TResult>(command: unknown): Promise<TResult> {

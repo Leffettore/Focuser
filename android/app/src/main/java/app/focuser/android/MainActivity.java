@@ -12,16 +12,22 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -35,7 +41,12 @@ public class MainActivity extends Activity {
     private static final int BASE = Color.parseColor("#0B0B11");
     private static final int TEXT = Color.parseColor("#E8E8F0");
 
+    // Commands that only read, so the last answer can stand in while the server is unreachable.
+    private static final Pattern READS = Pattern.compile(
+            "^(list_|get_|app_version$|pomodoro_(status|presets|history)$|allowance_(list|history)$)");
+
     private LinearLayout strip;
+    private TextView offline;
     private TextView message;
     private Button action;
     private EditText address;
@@ -71,14 +82,47 @@ public class MainActivity extends Activity {
         strip.addView(action);
         root.addView(strip);
 
+        offline = new TextView(this);
+        offline.setText("Offline: showing the last saved data. Changes need the server.");
+        offline.setTextColor(TEXT);
+        offline.setBackgroundColor(Color.parseColor("#4A3A12"));
+        offline.setPadding(dp(16), dp(6), dp(16), dp(6));
+        offline.setVisibility(View.GONE);
+        root.addView(offline);
+
         web = new WebView(this);
         web.setBackgroundColor(BASE);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
-        web.setWebViewClient(new WebViewClient());
+        web.setWebViewClient(new WebViewClient() {
+            /** Page files come through {@link Server}, so the last good copy opens without the tailnet. */
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (!"GET".equals(request.getMethod()) || !url.startsWith(base())) return null;
+                try {
+                    Server.Reply reply = Server.fetch(MainActivity.this, url, null, true);
+                    String mime = reply.type.split(";")[0].trim();
+                    String charset = reply.type.contains("charset=") ? reply.type.replaceAll(".*charset=", "") : null;
+                    return new WebResourceResponse(mime, charset, reply.status, "OK", null,
+                            new ByteArrayInputStream(reply.body));
+                } catch (IOException e) {
+                    return null;
+                }
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "FocuserAndroid");
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
+    }
+
+    /** The server's address without the document name: where the UI and `/command` live. */
+    private String base() {
+        return Sync.prefs(this).getString(Sync.URL_KEY, "").replaceAll("config\\.json$", "");
+    }
+
+    private void showOffline(boolean on) {
+        runOnUiThread(() -> offline.setVisibility(on ? View.VISIBLE : View.GONE));
     }
 
     /** What the page's Applications screen calls: the phone's own blocked apps, never the server's. */
@@ -101,6 +145,26 @@ public class MainActivity extends Activity {
                 }
             }
             return out.toString();
+        }
+
+        /** Runs a command on the server and answers through `window.__focuserCommand`; status 0 means unreachable. */
+        @JavascriptInterface
+        public void command(int id, String json) {
+            new Thread(() -> {
+                int status = 0;
+                String body = "";
+                try {
+                    boolean read = READS.matcher(new JSONObject(json).optString("cmd")).find();
+                    Server.Reply reply = Server.fetch(MainActivity.this, base() + "command", json, read);
+                    status = reply.status;
+                    body = new String(reply.body, StandardCharsets.UTF_8);
+                    showOffline(reply.cached);
+                } catch (IOException | JSONException e) {
+                    showOffline(true);
+                }
+                String script = "window.__focuserCommand(" + id + "," + status + "," + JSONObject.quote(body) + ")";
+                runOnUiThread(() -> web.evaluateJavascript(script, null));
+            }).start();
         }
 
         @JavascriptInterface
