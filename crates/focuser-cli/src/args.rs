@@ -548,6 +548,7 @@ impl TopLevel {
                 list_id,
                 slots: slot.into_iter().map(TimeSlot::from).collect(),
                 always_active: always,
+                none: false,
             },
 
             TopLevel::Stats(c) => match c {

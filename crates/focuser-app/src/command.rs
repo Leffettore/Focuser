@@ -11,8 +11,8 @@ use chrono::NaiveDate;
 use focuser_common::allowance::{Allowance, AllowanceMatch, AllowanceStatus};
 use focuser_common::pomodoro::{PomodoroConfig, PomodoroPreset, PomodoroSession, PomodoroStatus};
 use focuser_common::types::{
-    AppMatchType, AppRule, BlockList, BlockedEvent, EntityId, ExceptionRule, ExceptionType,
-    TimeSlot, UsageStat, WebsiteMatchType, WebsiteRule,
+    AppMatchType, AppRule, BlockList, BlockedEvent, DeviceUsage, EntityId, ExceptionRule,
+    ExceptionType, Location, TimeSlot, UsageStat, WebsiteMatchType, WebsiteRule,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -146,6 +146,44 @@ pub enum Command {
         list_id: EntityId,
         slots: Vec<TimeSlot>,
         always_active: bool,
+        /// No all-devices schedule: only devices with hours of their own run the list.
+        #[serde(default)]
+        none: bool,
+    },
+    /// Hours for one device only; the rules stay shared. `same_as_all` drops
+    /// the device's own hours so it follows the list's again; otherwise
+    /// `always_active` or `slots` set them, as in [`Command::UpdateSchedule`].
+    UpdateDeviceSchedule {
+        list_id: EntityId,
+        device: String,
+        slots: Vec<TimeSlot>,
+        always_active: bool,
+        same_as_all: bool,
+    },
+    /// Where a list blocks or never blocks (the phone only). Empty means everywhere.
+    SetListLocations {
+        list_id: EntityId,
+        locations: Vec<Location>,
+    },
+    /// This device's name, as it appears in a list's `device_schedules`.
+    GetDeviceName,
+
+    // ─── Usage across devices ─────────────────────────────────────
+    /// A device's time per app or site, as that device counted it. Sending
+    /// the same rows again changes nothing.
+    ReportUsage {
+        rows: Vec<DeviceUsage>,
+    },
+    /// A device says it syncs with this server, so it is listed even before it
+    /// has hours or usage of its own.
+    ReportDevice {
+        device: String,
+    },
+    /// Every device that has synced with this server.
+    GetDevices,
+    GetDeviceUsage {
+        from: NaiveDate,
+        to: NaiveDate,
     },
 
     // ─── Statistics ───────────────────────────────────────────────
@@ -439,6 +477,9 @@ pub enum CommandResult {
     /// A number of affected items — e.g. rules imported or cleared.
     Count(u32),
     Stats(Vec<UsageStat>),
+    DeviceUsage(Vec<DeviceUsage>),
+    DeviceName(String),
+    Devices(Vec<String>),
     BlockedEvents(Vec<BlockedEvent>),
     ProtectionStatus(Vec<ProtectionInfo>),
     ScheduledProtectionStatus(Vec<ScheduledProtectionStatus>),

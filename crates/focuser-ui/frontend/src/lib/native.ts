@@ -59,9 +59,13 @@ export function installUpdate(): Promise<void> {
  * so the phone keeps them itself and the page asks rather than the server.
  */
 interface AndroidBridge {
-  blockedApps(): string;
-  removeApp(id: string): void;
-  pickApps(): void;
+  blockedApps(listId: string): string;
+  removeApp(listId: string, id: string): void;
+  pickApps(listId: string): void;
+  /** `{"lat":..,"lon":..}` of the phone's last fix, or "" when it has none. */
+  here(): string;
+  hasUsageAccess(): boolean;
+  openUsageAccess(): void;
 }
 
 export interface DeviceApp {
@@ -80,6 +84,16 @@ function androidBridge(): AndroidBridge | undefined {
 
 export const isAndroidApp = () => androidBridge() !== undefined;
 
-export const deviceApps = (): DeviceApp[] => JSON.parse(androidBridge()?.blockedApps() ?? "[]");
-export const removeDeviceApp = (id: string) => androidBridge()?.removeApp(id);
-export const pickDeviceApps = () => androidBridge()?.pickApps();
+export const deviceApps = (listId: string): DeviceApp[] =>
+  JSON.parse(androidBridge()?.blockedApps(listId) ?? "[]");
+export const removeDeviceApp = (listId: string, id: string) =>
+  androidBridge()?.removeApp(listId, id);
+export const pickDeviceApps = (listId: string) => androidBridge()?.pickApps(listId);
+
+/** Where the phone last was, to open the place map there. */
+export const deviceHere = (): { lat: number; lon: number } | undefined => {
+  const here = androidBridge()?.here();
+  return here ? JSON.parse(here) : undefined;
+};
+export const hasUsageAccess = () => androidBridge()?.hasUsageAccess() ?? true;
+export const openUsageAccess = () => androidBridge()?.openUsageAccess();

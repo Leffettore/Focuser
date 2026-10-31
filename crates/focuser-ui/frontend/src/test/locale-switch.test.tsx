@@ -82,6 +82,7 @@ describe("switching language", () => {
         const rendered = message({
           count: n,
           name: "x",
+          device: "x",
           total: n,
           enabled: 1,
           visible: 1,
@@ -120,6 +121,7 @@ describe("switching language", () => {
         const rendered = message({
           count: 2,
           name: "x",
+          device: "x",
           total: 2,
           enabled: 1,
           visible: 1,

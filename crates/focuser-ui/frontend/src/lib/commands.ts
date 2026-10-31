@@ -8,6 +8,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import type {
   Allowance,
   AllowanceMatch,
@@ -18,7 +19,9 @@ import type {
   BrowserStatus,
   Command,
   CommandResult,
+  DeviceUsage,
   ExceptionType,
+  Location,
   LockSetup,
   PomodoroConfig,
   PomodoroStatus,
@@ -28,7 +31,8 @@ import type {
   WebsiteMatchType,
   WebsiteRuleKind,
 } from "@/bindings";
-import { send } from "./transport";
+import { isAndroidApp } from "./native";
+import { isTauri, send } from "./transport";
 
 export type {
   Allowance,
@@ -40,6 +44,7 @@ export type {
   BrowserStatus,
   Command,
   CommandResult,
+  DeviceUsage,
   ExceptionType,
   LockSetup,
   PomodoroConfig,
@@ -74,6 +79,8 @@ export const queryKeys = {
   allowances: ["allowances"] as const,
   pomodoro: ["pomodoro"] as const,
   stats: (from: string, to: string) => ["stats", from, to] as const,
+  devices: ["devices"] as const,
+  deviceUsage: (from: string, to: string) => ["device-usage", from, to] as const,
   events: (from: string, to: string) => ["events", from, to] as const,
   retention: ["stats-retention"] as const,
   browsers: ["browsers"] as const,
@@ -184,14 +191,88 @@ export const useRemoveException = () =>
 // ─── Schedule ───────────────────────────────────────────────────────
 
 export const useUpdateSchedule = () =>
-  useBlockListMutation<{ listId: string; slots: TimeSlot[]; alwaysActive: boolean }>(
-    ({ listId, slots, alwaysActive }) => ({
-      cmd: "update_schedule",
-      args: { list_id: listId, slots, always_active: alwaysActive },
-    }),
-  );
+  useBlockListMutation<{
+    listId: string;
+    slots: TimeSlot[];
+    alwaysActive: boolean;
+    /** No all-devices hours: only devices with hours of their own run the list. */
+    none: boolean;
+  }>(({ listId, slots, alwaysActive, none }) => ({
+    cmd: "update_schedule",
+    args: { list_id: listId, slots, always_active: alwaysActive, none },
+  }));
+
+/** Hours for one device only; the list's rules stay shared. */
+export const useUpdateDeviceSchedule = () =>
+  useBlockListMutation<{
+    listId: string;
+    device: string;
+    slots: TimeSlot[];
+    alwaysActive: boolean;
+    sameAsAll: boolean;
+  }>(({ listId, device, slots, alwaysActive, sameAsAll }) => ({
+    cmd: "update_device_schedule",
+    args: { list_id: listId, device, slots, always_active: alwaysActive, same_as_all: sameAsAll },
+  }));
+
+/** Where a list blocks or never blocks (the phone only); empty means everywhere. */
+export const useSetListLocations = () =>
+  useBlockListMutation<{ listId: string; locations: Location[] }>(({ listId, locations }) => ({
+    cmd: "set_list_locations",
+    args: { list_id: listId, locations },
+  }));
+
+const THIS_DEVICE_KEY = "focuser-this-device";
+
+/**
+ * Which device this page runs on, so only its own hours can be edited here.
+ * The phone and the desktop app know; a browser pointed at the server does
+ * not, so it asks once and remembers.
+ */
+export function useThisDevice(): { device: string; choose?: (device: string) => void } {
+  const known = isAndroidApp() ? "phone" : undefined;
+  const asked = useQuery({
+    queryKey: ["this-device"],
+    enabled: !known && isTauri(),
+    queryFn: async () => expect(await run({ cmd: "get_device_name" }), "device_name").data,
+  });
+  const [picked, setPicked] = useState(() => {
+    try {
+      return localStorage.getItem(THIS_DEVICE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  if (known) return { device: known };
+  if (isTauri()) return { device: asked.data ?? "" };
+  return {
+    device: picked,
+    choose: (device) => {
+      setPicked(device);
+      try {
+        localStorage.setItem(THIS_DEVICE_KEY, device);
+      } catch {}
+    },
+  };
+}
 
 // ─── Statistics ─────────────────────────────────────────────────────
+
+/** Every device that has synced with this server. */
+export function useDevices() {
+  return useQuery({
+    queryKey: queryKeys.devices,
+    queryFn: async () => expect(await run({ cmd: "get_devices" }), "devices").data,
+  });
+}
+
+export function useDeviceUsage(from: string, to: string) {
+  return useQuery({
+    queryKey: queryKeys.deviceUsage(from, to),
+    queryFn: async () =>
+      expect(await run({ cmd: "get_device_usage", args: { from, to } }), "device_usage").data,
+  });
+}
 
 export function useStats(from: string, to: string) {
   return useQuery({

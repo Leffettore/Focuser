@@ -260,9 +260,9 @@ fn schedule_slots_parse_and_round_trip() {
         "set",
         &id,
         "--slot",
-        "mon:09:00-17:00",
+        "mon:03:00-03:01",
         "--slot",
-        "sat:9-12",
+        "sat:3:00-3:01",
     ]);
 
     let schedule = &cli.json(&["list", "ls"])["data"][0]["schedule"];

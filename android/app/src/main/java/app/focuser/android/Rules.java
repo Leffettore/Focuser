@@ -1,8 +1,11 @@
 package app.focuser.android;
 
+import android.location.Location;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import org.json.JSONArray;
@@ -17,11 +20,14 @@ final class Rules {
         lists = new JSONObject(json).getJSONArray("block_lists");
     }
 
-    boolean blocks(String address, LocalDateTime now) {
+    /** Name this phone goes by in a list's `device_schedules`. */
+    static final String DEVICE = "phone";
+
+    boolean blocks(String address, LocalDateTime now, Location here) {
         String url = normalize(address);
         for (int i = 0; i < lists.length(); i++) {
             JSONObject list = lists.optJSONObject(i);
-            if (list == null || !list.optBoolean("enabled") || !scheduled(list, now)) continue;
+            if (list == null || !list.optBoolean("enabled") || !scheduled(list, now) || !inPlace(list, here)) continue;
             if (matchesWebsite(list.optJSONArray("websites"), url)
                     && !matchesException(list.optJSONArray("exceptions"), url)) {
                 return true;
@@ -30,13 +36,48 @@ final class Rules {
         return false;
     }
 
-    /** Whether any enabled list is inside its hours; the device's own apps follow the lists' schedules. */
-    boolean anyActive(LocalDateTime now) {
+    /** Ids of the enabled lists inside their hours and where {@code here} is; the phone's apps are chosen per list. */
+    List<String> activeListIds(LocalDateTime now, Location here) {
+        List<String> ids = new ArrayList<>();
         for (int i = 0; i < lists.length(); i++) {
             JSONObject list = lists.optJSONObject(i);
-            if (list != null && list.optBoolean("enabled") && scheduled(list, now)) return true;
+            if (list != null && list.optBoolean("enabled") && scheduled(list, now) && inPlace(list, here)) {
+                ids.add(list.optString("id"));
+            }
         }
-        return false;
+        return ids;
+    }
+
+    List<String> listIds() {
+        List<String> ids = new ArrayList<>();
+        for (int i = 0; i < lists.length(); i++) {
+            if (lists.optJSONObject(i) != null) ids.add(lists.optJSONObject(i).optString("id"));
+        }
+        return ids;
+    }
+
+    /**
+     * With no places a list blocks everywhere. Otherwise it blocks inside one of its "Block" places, if it has any,
+     * and never inside a "Skip" one. {@code null} (no fix yet) is outside every place.
+     */
+    private static boolean inPlace(JSONObject list, Location here) {
+        JSONArray places = list.optJSONArray("locations");
+        if (places == null || places.length() == 0) return true;
+        boolean wantsBlock = false;
+        boolean inBlock = false;
+        float[] meters = new float[1];
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject p = places.optJSONObject(i);
+            if (p == null) continue;
+            boolean skip = "Skip".equals(p.optString("mode"));
+            wantsBlock |= !skip;
+            if (here == null) continue;
+            Location.distanceBetween(here.getLatitude(), here.getLongitude(), p.optDouble("lat"), p.optDouble("lon"), meters);
+            if (meters[0] > p.optDouble("radius_m", 150)) continue;
+            if (skip) return false;
+            inBlock = true;
+        }
+        return !wantsBlock || inBlock;
     }
 
     /** Whether a list that locks itself while scheduled is inside its hours, so Focuser itself must stay put. */
@@ -62,11 +103,12 @@ final class Rules {
         for (int i = 0; websites != null && i < websites.length(); i++) {
             JSONObject rule = websites.optJSONObject(i);
             if (rule == null || !rule.optBoolean("enabled")) continue;
-            // ponytail: only plain domains; keyword and wildcard website rules are ignored. Add them if a list needs them.
-            String domain = rule.optJSONObject("match_type") == null
-                    ? null
-                    : rule.optJSONObject("match_type").optString("Domain", null);
+            // ponytail: only domains and url paths; keyword and wildcard website rules are ignored. Add them if a list needs them.
+            JSONObject type = rule.optJSONObject("match_type");
+            String domain = type == null ? null : type.optString("Domain", null);
             if (domain != null && (host.equals(domain) || host.endsWith("." + domain))) return true;
+            String path = type == null ? null : type.optString("UrlPath", null);
+            if (path != null && url.startsWith(normalize(path))) return true;
         }
         return false;
     }
@@ -106,7 +148,12 @@ final class Rules {
 
     /** A list with no schedule is always on; otherwise `now` must fall in a slot (slots may wrap past midnight). */
     private static boolean scheduled(JSONObject list, LocalDateTime now) {
-        JSONObject schedule = list.optJSONObject("schedule");
+        JSONObject own = list.optJSONObject("device_schedules");
+        // No all-devices hours and none of its own: this phone does not run the list.
+        if ((own == null || own.optJSONObject(DEVICE) == null) && list.optBoolean("only_devices")) return false;
+        JSONObject schedule = own != null && own.optJSONObject(DEVICE) != null
+                ? own.optJSONObject(DEVICE)
+                : list.optJSONObject("schedule");
         JSONArray slots = schedule == null ? null : schedule.optJSONArray("time_slots");
         if (schedule == null || !schedule.optBoolean("enabled") || slots == null || slots.length() == 0) return true;
         LocalTime t = now.toLocalTime();

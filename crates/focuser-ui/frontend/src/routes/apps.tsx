@@ -76,12 +76,17 @@ export function Apps() {
 
 /** The phone's own apps: they live on the device, not in the synced lists. */
 function DeviceApps() {
-  const [apps, setApps] = useState(deviceApps);
+  const lists = useBlockLists();
+  const [rawSelected, setSelected] = useState("");
+  const all = lists.data ?? [];
+  const listId = resolveSelected(all, rawSelected);
+  const [apps, setApps] = useState(() => deviceApps(listId));
   useEffect(() => {
-    const refresh = () => setApps(deviceApps());
+    const refresh = () => setApps(deviceApps(listId));
+    refresh();
     window.addEventListener(DEVICE_APPS_EVENT, refresh);
     return () => window.removeEventListener(DEVICE_APPS_EVENT, refresh);
-  }, []);
+  }, [listId]);
 
   return (
     <Page>
@@ -89,9 +94,12 @@ function DeviceApps() {
         title={m.apps_title()}
         description={m.apps_description()}
         actions={
-          <Button icon={<Plus />} onClick={pickDeviceApps}>
-            {m.apps_add()}
-          </Button>
+          <>
+            <ListPicker lists={all} value={listId} onChange={setSelected} />
+            <Button icon={<Plus />} onClick={() => pickDeviceApps(listId)} disabled={!listId}>
+              {m.apps_add()}
+            </Button>
+          </>
         }
       />
       {apps.length === 0 ? (
@@ -106,8 +114,8 @@ function DeviceApps() {
           }))}
           icons={new Map(apps.map((a) => [a.label, a.icon ?? null]))}
           onRemove={(id) => {
-            removeDeviceApp(id);
-            setApps(deviceApps());
+            removeDeviceApp(listId, id);
+            setApps(deviceApps(listId));
           }}
           noun={m.noun_application()}
         />

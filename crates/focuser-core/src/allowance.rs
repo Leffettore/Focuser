@@ -112,6 +112,7 @@ impl AllowanceTracker {
     /// Handle one tick. Attributes the tick to any matching allowance,
     /// increments usage, and updates the blocked set when exhausted.
     pub fn ingest_tick(&self, db: &Database, tick: &AllowanceTick) -> Result<()> {
+        self.record_device_usage(db, tick);
         if db.ingest_shared_at(tick, Local::now())? || tick.shared_only {
             return Ok(());
         }
@@ -140,6 +141,28 @@ impl AllowanceTracker {
             self.check_thresholds(&a, used);
         }
         Ok(())
+    }
+
+    /// Credit a focused tick to this device's usage totals, whether or not an
+    /// allowance matches it. Best effort: a failed write must not stop the tick.
+    fn record_device_usage(&self, db: &Database, tick: &AllowanceTick) {
+        let target = match (&tick.hostname, &tick.app_exe) {
+            (Some(host), _) => canonical_host(host),
+            (None, Some(exe)) => exe.to_lowercase(),
+            _ => return,
+        };
+        if !tick.active || target.is_empty() {
+            return;
+        }
+        let secs = i64::from(
+            tick.increment_secs
+                .unwrap_or(TICK_INCREMENT_SECS)
+                .clamp(1, 120),
+        );
+        let date = Local::now().format("%Y-%m-%d").to_string();
+        if let Err(e) = db.add_device_usage(&db.device_name(), &date, &target, secs) {
+            tracing::warn!("device usage not recorded: {e}");
+        }
     }
 
     /// Emit warning / exhausted notifications at thresholds. Updates the

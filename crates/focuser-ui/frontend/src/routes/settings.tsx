@@ -26,7 +26,14 @@ import {
   useStatsRetention,
 } from "@/lib/commands";
 import { useLanguage } from "@/lib/language";
-import { isTauri, pickSound, previewSound } from "@/lib/native";
+import {
+  hasUsageAccess,
+  isAndroidApp,
+  isTauri,
+  openUsageAccess,
+  pickSound,
+  previewSound,
+} from "@/lib/native";
 import {
   MAX_RETENTION_DAYS,
   SETTING_KEYS,
@@ -263,6 +270,25 @@ export function Settings() {
           }
         />
       </SettingsSection>
+
+      {isAndroidApp() && (
+        <SettingsSection title={m.settings_section_phone()}>
+          <SettingRow
+            label={m.settings_usage_access()}
+            description={m.settings_usage_access_description()}
+            control={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openUsageAccess}
+                disabled={hasUsageAccess()}
+              >
+                {m.settings_usage_access_open()}
+              </Button>
+            }
+          />
+        </SettingsSection>
+      )}
 
       <SettingsSection title={m.settings_section_language()}>
         <SettingRow

@@ -19,6 +19,21 @@ pub const SETTING_TOKEN: &str = "sync_token";
 /// Hash of the last document applied in full, so an unchanged file is a no-op.
 const SETTING_LAST_HASH: &str = "sync_last_hash";
 
+/// The list as this device runs it: its own hours replace the shared ones.
+fn for_device(
+    mut list: focuser_common::types::BlockList,
+    device: &str,
+) -> focuser_common::types::BlockList {
+    if let Some(own) = list.device_schedules.get(device) {
+        // "Always" is stored as a disabled schedule; the engine reads no schedule as always.
+        list.schedule = own.enabled.then(|| own.clone());
+    } else if list.only_devices {
+        // No all-devices hours and none of its own: this device does not run the list.
+        list.enabled = false;
+    }
+    list
+}
+
 /// GET the document. Runs without the engine lock: the server may be slow or
 /// down, and the blocking loop must not wait for it.
 pub fn fetch(url: &str, token: Option<&str>) -> Result<String, String> {
@@ -28,6 +43,51 @@ pub fn fetch(url: &str, token: Option<&str>) -> Result<String, String> {
     }
     let response = request.call().map_err(|e| e.to_string())?;
     response.into_string().map_err(|e| e.to_string())
+}
+
+/// Send this device's usage for today and yesterday to the server, which
+/// keeps every device's totals side by side. Best effort: the next sync tries
+/// again, and the pull above has already been applied.
+pub fn push_usage(db: &focuser_core::Database, config_url: &str, token: Option<&str>) {
+    let device = db.device_name();
+    post(
+        config_url,
+        token,
+        &serde_json::json!({ "cmd": "report_device", "args": { "device": device } }),
+    );
+    let today = chrono::Local::now().date_naive();
+    let rows: Vec<_> = db
+        .device_usage(
+            &(today - chrono::Days::new(1)).to_string(),
+            &today.to_string(),
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.device == device)
+        .collect();
+    if rows.is_empty() {
+        return;
+    }
+    post(
+        config_url,
+        token,
+        &serde_json::json!({ "cmd": "report_usage", "args": { "rows": rows } }),
+    );
+}
+
+/// POST a command to the server next to the config document. Best effort.
+fn post(config_url: &str, token: Option<&str>, body: &serde_json::Value) {
+    let url = format!("{}command", config_url.trim_end_matches("config.json"));
+    let mut request = ureq::post(&url).timeout(Duration::from_secs(10));
+    if let Some(token) = token.filter(|t| !t.is_empty()) {
+        request = request.set("Authorization", &format!("Bearer {token}"));
+    }
+    if let Err(e) = request
+        .set("Content-Type", "application/json")
+        .send_string(&body.to_string())
+    {
+        tracing::warn!("could not send to {url}: {e}");
+    }
 }
 
 pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<String> {
@@ -55,11 +115,12 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
 
     // Match against what is stored, not a cache from before the last merge.
     engine.refresh()?;
+    let device = engine.db().device_name();
     let (mut added, mut updated, mut deferred) = (0, 0, 0);
     for incoming in document.block_lists {
         let existing = engine.block_lists().iter().find(|l| l.id == incoming.id);
         let Some(existing) = existing else {
-            let mut list = incoming;
+            let mut list = for_device(incoming, &device);
             list.schedule_unlocked_until = None;
             list.applications.clear();
             engine.db().create_block_list(&list)?;
@@ -72,7 +133,7 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
             continue;
         }
         // Device-local state the server knows nothing about.
-        let mut list = incoming;
+        let mut list = for_device(incoming, &device);
         list.lock = existing.lock.clone();
         list.protection = existing.protection.clone();
         list.schedule_unlocked_until = existing.schedule_unlocked_until;
@@ -173,5 +234,37 @@ mod tests {
             "\"version\":999",
         );
         assert!(merge(&mut engine, &newer).is_err());
+    }
+
+    #[test]
+    fn device_schedule_replaces_the_shared_hours_on_that_device_only() {
+        use focuser_common::types::Schedule;
+        let mut engine = engine();
+        engine.db().set_setting("device_name", "phone").unwrap();
+        let mut list = BlockList::new("Focus");
+        let hours = |enabled| Schedule {
+            id: focuser_common::types::new_id(),
+            name: "own".into(),
+            time_slots: Vec::new(),
+            enabled,
+        };
+        list.device_schedules.insert("phone".into(), hours(false));
+        list.device_schedules.insert("laptop".into(), hours(true));
+        list.schedule = Some(hours(true));
+        merge(&mut engine, &doc(&[list])).unwrap();
+        engine.refresh().unwrap();
+        // The phone's entry is "always", which reads as no schedule at all.
+        assert!(engine.block_lists()[0].schedule.is_none());
+    }
+
+    #[test]
+    fn a_list_without_all_device_hours_is_off_on_a_device_with_none_of_its_own() {
+        let mut engine = engine();
+        engine.db().set_setting("device_name", "laptop").unwrap();
+        let mut list = BlockList::new("Phone only");
+        list.only_devices = true;
+        merge(&mut engine, &doc(&[list])).unwrap();
+        engine.refresh().unwrap();
+        assert!(!engine.block_lists()[0].enabled);
     }
 }

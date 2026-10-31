@@ -61,6 +61,21 @@ pub fn print_human(result: &CommandResult) {
             }
         }
 
+        CommandResult::DeviceName(name) => println!("{name}"),
+        CommandResult::Devices(names) => names.iter().for_each(|n| println!("{n}")),
+        CommandResult::DeviceUsage(rows) if rows.is_empty() => println!("No usage."),
+        CommandResult::DeviceUsage(rows) => {
+            for r in rows {
+                println!(
+                    "{}  {:<16} {:<32} {:>8}s",
+                    r.date,
+                    truncate(&r.device, 16),
+                    truncate(&r.target, 32),
+                    r.seconds
+                );
+            }
+        }
+
         CommandResult::BlockedEvents(events) if events.is_empty() => println!("No events."),
         CommandResult::BlockedEvents(events) => {
             for e in events {

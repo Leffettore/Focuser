@@ -239,9 +239,12 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             list_id,
             slots,
             always_active,
+            none,
         } => {
             mutate_list(ctx, &mut engine, list_id, |list| {
-                list.schedule = if always_active {
+                ensure_not_running(list, list.schedule.as_ref())?;
+                list.only_devices = none;
+                list.schedule = if always_active || none {
                     // No schedule means "active whenever enabled".
                     None
                 } else {
@@ -259,6 +262,63 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             })?;
             Ok(CommandResult::Unit)
         }
+
+        Command::UpdateDeviceSchedule {
+            list_id,
+            device,
+            slots,
+            always_active,
+            same_as_all,
+        } => {
+            let device = device.trim().to_string();
+            if device.is_empty() {
+                return Err(CommandError::Validation("device name is empty".into()));
+            }
+            mutate_list(ctx, &mut engine, list_id, |list| {
+                ensure_not_running(list, list.device_schedules.get(&device))?;
+                if same_as_all {
+                    list.device_schedules.remove(&device);
+                } else {
+                    // An empty or disabled schedule reads as "on whenever enabled".
+                    list.device_schedules.insert(
+                        device.clone(),
+                        Schedule {
+                            id: focuser_common::types::new_id(),
+                            name: format!("{} schedule ({device})", list.name),
+                            time_slots: if always_active { Vec::new() } else { slots },
+                            enabled: !always_active,
+                        },
+                    );
+                }
+                Ok(())
+            })?;
+            Ok(CommandResult::Unit)
+        }
+
+        Command::SetListLocations { list_id, locations } => {
+            for l in &locations {
+                let ok = !l.name.trim().is_empty()
+                    && (-90.0..=90.0).contains(&l.lat)
+                    && (-180.0..=180.0).contains(&l.lon)
+                    && (20..=50_000).contains(&l.radius_m);
+                if !ok {
+                    return Err(CommandError::Validation(format!(
+                        "location \"{}\" is not a named point with a radius of 20 m to 50 km",
+                        l.name
+                    )));
+                }
+            }
+            mutate_list(ctx, &mut engine, list_id, |list| {
+                // Places only matter on the phone, so its hours are the ones to respect.
+                let phone = list.device_schedules.get("phone");
+                ensure_not_running(list, phone.or(list.schedule.as_ref()))?;
+                list.locations = locations;
+                Ok(())
+            })?;
+            Ok(CommandResult::Unit)
+        }
+
+        Command::GetDeviceName => Ok(CommandResult::DeviceName(engine.db().device_name())),
 
         // ─── Statistics ───────────────────────────────────────────
         Command::GetStats { from, to } => {
@@ -815,6 +875,30 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             Ok(CommandResult::Text(summary))
         }
 
+        Command::ReportUsage { rows } => {
+            engine.db().put_device_usage(&rows)?;
+            Ok(CommandResult::Unit)
+        }
+
+        Command::ReportDevice { device } => {
+            let device = device.trim();
+            if device.is_empty() {
+                return Err(CommandError::Validation("device name is empty".into()));
+            }
+            engine.db().put_device(device)?;
+            Ok(CommandResult::Unit)
+        }
+
+        Command::GetDevices => Ok(CommandResult::Devices(engine.db().devices()?)),
+
+        Command::GetDeviceUsage { from, to } => {
+            validate_range(from, to)?;
+            let (from, to) = (from.to_string(), to.to_string());
+            Ok(CommandResult::DeviceUsage(
+                engine.db().device_usage(&from, &to)?,
+            ))
+        }
+
         Command::SyncNow => {
             let setting = |key| {
                 engine
@@ -831,6 +915,7 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             let summary = crate::sync::merge(&mut engine, &json)?;
             engine.refresh()?;
             ctx.sync_hosts(&engine);
+            crate::sync::push_usage(engine.db(), &url, token.as_deref());
             Ok(CommandResult::Text(summary))
         }
 
@@ -1156,6 +1241,24 @@ fn normalize(match_type: &mut WebsiteMatchType) {
 /// four `service.rs` arms plus a separate `check_protected` in `commands.rs`,
 /// and the CLI's `list disable` path skipped it entirely — so a protected list
 /// could be disabled from the command line.
+/// Hours that are running cannot be edited, or they could be cut short to
+/// slip out of a block. Always-on hours (no slots, or no gap) stay editable,
+/// or they could never be changed. A scheduled lock the user has unlocked for
+/// this occurrence allows the edit, as it does for every other one.
+fn ensure_not_running(list: &BlockList, schedule: Option<&Schedule>) -> CommandOutcome<()> {
+    let unlocked = list
+        .schedule_unlocked_until
+        .is_some_and(|t| t > chrono::Utc::now());
+    match schedule {
+        Some(s) if !unlocked && s.is_active_now() && !s.never_ends() => {
+            Err(CommandError::Validation(
+                "these hours are running right now; change them when they end".into(),
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn ensure_unprotected(engine: &BlockEngine, id: EntityId) -> CommandOutcome<()> {
     if engine.is_block_list_protected(id) {
         Err(CommandError::Protected)
@@ -1651,6 +1754,7 @@ mod tests {
                 list_id: list.id,
                 slots: vec![slot],
                 always_active: false,
+                none: false,
             },
         )
         .unwrap();
@@ -1665,6 +1769,7 @@ mod tests {
                 list_id: list.id,
                 slots: vec![],
                 always_active: true,
+                none: false,
             },
         )
         .unwrap();
@@ -1961,6 +2066,7 @@ mod tests {
                     chrono::NaiveTime::MIN,
                 )],
                 always_active: false,
+                none: false,
             },
         )
         .unwrap();
@@ -2258,6 +2364,7 @@ mod tests {
                     list_id: list.id,
                     slots: list.schedule.as_ref().unwrap().time_slots.clone(),
                     always_active: false,
+                    none: false,
                 },
             )
             .unwrap();
@@ -2330,6 +2437,7 @@ mod tests {
                 list_id: list.id,
                 slots: list.schedule.unwrap().time_slots,
                 always_active: false,
+                none: false,
             },
         )
         .unwrap();
@@ -2402,6 +2510,101 @@ mod tests {
     }
 
     #[test]
+    fn running_hours_cannot_be_edited_and_none_drops_the_all_device_hours() {
+        use chrono::Datelike;
+        let ctx = ctx();
+        let list = create(&ctx, "Phone");
+        let hours = |slots, none| Command::UpdateSchedule {
+            list_id: list.id,
+            slots,
+            always_active: false,
+            none,
+        };
+        let now = chrono::Local::now();
+        let running = TimeSlot::new(
+            now.weekday(),
+            chrono::NaiveTime::MIN,
+            chrono::NaiveTime::from_hms_opt(23, 59, 0).unwrap(),
+        );
+        // Skip the last minute of the day, when "running" would not hold.
+        if now.time() >= chrono::NaiveTime::from_hms_opt(23, 58, 0).unwrap() {
+            return;
+        }
+        execute(&ctx, hours(vec![running], false)).unwrap();
+        let err = execute(&ctx, hours(vec![], false)).unwrap_err();
+        assert_eq!(err.code(), "validation");
+        assert!(
+            lists(&ctx)[0].schedule.is_some(),
+            "a refused edit changes nothing"
+        );
+
+        // Another device's hours are separate, and never refused by this one's.
+        let phone = |same_as_all| Command::UpdateDeviceSchedule {
+            list_id: list.id,
+            device: "phone".into(),
+            slots: vec![],
+            always_active: true,
+            same_as_all,
+        };
+        execute(&ctx, phone(false)).unwrap();
+
+        // With no schedule left to run, "none" is accepted.
+        {
+            let mut engine = ctx.engine.lock().unwrap();
+            let mut stored = engine.db().get_block_list(list.id).unwrap();
+            stored.schedule = None;
+            engine.db().update_block_list(&stored).unwrap();
+            engine.refresh().unwrap();
+        }
+        execute(&ctx, hours(vec![], true)).unwrap();
+        let stored = lists(&ctx).remove(0);
+        assert!(stored.only_devices && stored.schedule.is_none());
+    }
+
+    #[test]
+    fn reported_devices_are_listed_once() {
+        let ctx = ctx();
+        for d in ["phone", "laptop", "phone"] {
+            execute(&ctx, Command::ReportDevice { device: d.into() }).unwrap();
+        }
+        assert!(execute(&ctx, Command::ReportDevice { device: " ".into() }).is_err());
+        let Ok(CommandResult::Devices(names)) = execute(&ctx, Command::GetDevices) else {
+            panic!("expected devices");
+        };
+        assert_eq!(names, ["laptop", "phone"]);
+    }
+
+    #[test]
+    fn locations_are_validated_and_stored() {
+        use focuser_common::types::{Location, LocationMode};
+        let ctx = ctx();
+        let list = create(&ctx, "Where");
+        let place = |name: &str, lat, radius_m| Location {
+            name: name.into(),
+            lat,
+            lon: 11.1,
+            radius_m,
+            mode: LocationMode::Block,
+        };
+        let set = |locations| Command::SetListLocations {
+            list_id: list.id,
+            locations,
+        };
+        for bad in [
+            place("", 46.0, 150),
+            place("Home", 91.0, 150),
+            place("Home", 46.0, 5),
+        ] {
+            assert_eq!(
+                execute(&ctx, set(vec![bad])).unwrap_err().code(),
+                "validation"
+            );
+        }
+        execute(&ctx, set(vec![place("Home", 46.07, 150)])).unwrap();
+        assert_eq!(lists(&ctx)[0].locations[0].name, "Home");
+    }
+
+    #[test]
     fn hours_with_no_gap_cannot_carry_a_lock_or_a_shared_allowance() {
         use chrono::{Datelike, NaiveTime, Weekday::*};
         let ctx = ctx();
@@ -2413,6 +2616,7 @@ mod tests {
                 .map(|day| TimeSlot::new(*day, NaiveTime::MIN, NaiveTime::MIN))
                 .collect(),
             always_active: false,
+            none: false,
         };
         let lock = || Command::ConfigureScheduledProtection {
             list_id: list.id,
@@ -2446,6 +2650,7 @@ mod tests {
             list_id: list.id,
             slots: vec![],
             always_active: true,
+            none: false,
         });
         assert!(!ctx.engine.lock().unwrap().is_block_list_protected(list.id));
     }
@@ -2587,8 +2792,8 @@ mod tests {
             Command::RemoveAppRule { list_id: list.id, rule_id: app.id },
             Command::AddException { list_id: list.id, exception: ExceptionType::Domain("example.com".into()) },
             Command::RemoveException { list_id: list.id, exception_id: exception.id },
-            Command::UpdateSchedule { list_id: list.id, slots: vec![], always_active: false },
-            Command::UpdateSchedule { list_id: list.id, slots: vec![], always_active: true },
+            Command::UpdateSchedule { list_id: list.id, slots: vec![], always_active: false, none: false },
+            Command::UpdateSchedule { list_id: list.id, slots: vec![], always_active: true, none: false },
             Command::UpdateBlockList { list: Box::new(stored.clone()) },
             Command::ToggleBlockList { id: list.id, enabled: false },
             Command::ToggleBlockList { id: list.id, enabled: true },

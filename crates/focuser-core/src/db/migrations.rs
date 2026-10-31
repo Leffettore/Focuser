@@ -253,6 +253,23 @@ pub fn run_all(conn: &Connection) -> Result<()> {
             "v9: focus sessions locked for a number of rounds",
             Step::Code(add_pomodoro_lock),
         ),
+        (
+            "v10: time spent per device, day and app or site",
+            Step::Sql(
+                "CREATE TABLE IF NOT EXISTS device_usage (
+                device TEXT NOT NULL,
+                date TEXT NOT NULL,
+                target TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                seconds INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (device, date, target)
+            );",
+            ),
+        ),
+        (
+            "v11: devices that have synced with this server",
+            Step::Sql("CREATE TABLE IF NOT EXISTS devices (name TEXT PRIMARY KEY);"),
+        ),
     ];
 
     for (i, (name, step)) in migrations.iter().enumerate() {

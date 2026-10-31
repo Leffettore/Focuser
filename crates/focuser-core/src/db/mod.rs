@@ -3,7 +3,7 @@ mod migrations;
 mod pomodoro;
 
 use focuser_common::error::{FocuserError, Result};
-use focuser_common::types::{BlockList, BlockedEvent, EntityId, UsageStat};
+use focuser_common::types::{BlockList, BlockedEvent, DeviceUsage, EntityId, UsageStat};
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::Mutex;
@@ -285,6 +285,125 @@ impl Database {
         )
         .map_err(|e| FocuserError::Database(e.to_string()))?;
         Ok(())
+    }
+
+    /// This machine's name for per-device hours and usage: the `device_name`
+    /// setting, else the hostname.
+    pub fn device_name(&self) -> String {
+        let named = self
+            .get_setting("device_name")
+            .ok()
+            .flatten()
+            .filter(|n| !n.trim().is_empty());
+        named
+            .or_else(|| {
+                let host = std::fs::read_to_string("/etc/hostname").ok().or_else(|| {
+                    std::env::var("COMPUTERNAME")
+                        .or_else(|_| std::env::var("HOSTNAME"))
+                        .ok()
+                })?;
+                Some(host.trim().to_string()).filter(|h| !h.is_empty())
+            })
+            .unwrap_or_else(|| "computer".into())
+    }
+
+    /// Credit time to this device's own row for a day.
+    pub fn add_device_usage(
+        &self,
+        device: &str,
+        date: &str,
+        target: &str,
+        secs: i64,
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO device_usage (device, date, target, seconds) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(device, date, target) DO UPDATE SET seconds = seconds + ?4",
+            rusqlite::params![device, date, target, secs],
+        )
+        .map_err(|e| FocuserError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Replace a device's totals, as reported by that device. Re-sending the
+    /// same report changes nothing.
+    pub fn put_device_usage(&self, rows: &[DeviceUsage]) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        for r in rows {
+            conn.execute(
+                "INSERT INTO device_usage (device, date, target, label, seconds)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(device, date, target)
+                 DO UPDATE SET label = ?4, seconds = ?5",
+                rusqlite::params![r.device, r.date, r.target, r.label, r.seconds],
+            )
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// Remember that `name` syncs with this server.
+    pub fn put_device(&self, name: &str) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        conn.execute(
+            "INSERT OR IGNORE INTO devices (name) VALUES (?1)",
+            rusqlite::params![name],
+        )
+        .map_err(|e| FocuserError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Every device that has synced with this server, by name.
+    pub fn devices(&self) -> Result<Vec<String>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        let mut stmt = conn
+            .prepare("SELECT name FROM devices ORDER BY name")
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |r| r.get(0))
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        rows.collect::<std::result::Result<_, _>>()
+            .map_err(|e| FocuserError::Database(e.to_string()))
+    }
+
+    /// Every device's totals for `from..=to` (`YYYY-MM-DD`).
+    pub fn device_usage(&self, from: &str, to: &str) -> Result<Vec<DeviceUsage>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT device, date, target, label, seconds FROM device_usage
+                 WHERE date >= ?1 AND date <= ?2 ORDER BY date, device, target",
+            )
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        let rows = stmt
+            .query_map(rusqlite::params![from, to], |r| {
+                Ok(DeviceUsage {
+                    device: r.get(0)?,
+                    date: r.get(1)?,
+                    target: r.get(2)?,
+                    label: r.get(3)?,
+                    seconds: r.get(4)?,
+                })
+            })
+            .map_err(|e| FocuserError::Database(e.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| FocuserError::Database(e.to_string()))?;
+        Ok(rows)
     }
 
     /// Write a statistics row for a given day. Exists for the dev server's
@@ -696,5 +815,33 @@ mod tests {
                 Some("persisted".into())
             );
         }
+    }
+
+    #[test]
+    fn device_usage_accumulates_locally_and_replaces_when_reported() {
+        let db = Database::open_in_memory().unwrap();
+        db.add_device_usage("laptop", "2026-10-30", "instagram.com", 30)
+            .unwrap();
+        db.add_device_usage("laptop", "2026-10-30", "instagram.com", 30)
+            .unwrap();
+        let row = |device: &str, seconds| DeviceUsage {
+            device: device.into(),
+            date: "2026-10-30".into(),
+            target: "com.instagram.android".into(),
+            label: "Instagram".into(),
+            seconds,
+        };
+        db.put_device_usage(&[row("phone", 500)]).unwrap();
+        db.put_device_usage(&[row("phone", 700)]).unwrap();
+        let all = db.device_usage("2026-10-30", "2026-10-30").unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(
+            all.iter().find(|r| r.device == "laptop").unwrap().seconds,
+            60
+        );
+        assert_eq!(
+            all.iter().find(|r| r.device == "phone").unwrap().seconds,
+            700
+        );
     }
 }

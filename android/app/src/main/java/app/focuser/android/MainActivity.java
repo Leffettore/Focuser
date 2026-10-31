@@ -1,5 +1,6 @@
 package app.focuser.android;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -11,6 +12,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.location.Location;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
@@ -29,10 +32,12 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +59,13 @@ public class MainActivity extends Activity {
     // Commands that only read, so the last answer can stand in while the server is unreachable.
     private static final Pattern READS = Pattern.compile(
             "^(list_|get_|app_version$|pomodoro_(status|presets|history)$|allowance_(list|history)$)");
+
+    // Parts of an app that can be blocked on their own; the key is stored in the list's app set.
+    private static final java.util.Map<String, String> VARIANTS = new java.util.LinkedHashMap<>();
+    static {
+        VARIANTS.put("com.instagram.android#reels", "Instagram – Reels only");
+        VARIANTS.put("com.google.android.youtube#shorts", "YouTube – Shorts only");
+    }
 
     private LinearLayout strip;
     private TextView offline;
@@ -138,15 +150,18 @@ public class MainActivity extends Activity {
     /** What the page's Applications screen calls: the phone's own blocked apps, never the server's. */
     private final class Bridge {
         @JavascriptInterface
-        public String blockedApps() {
+        public String blockedApps(String listId) {
             JSONArray out = new JSONArray();
             PackageManager pm = getPackageManager();
-            for (String name : Sync.prefs(MainActivity.this).getStringSet(Sync.APPS_KEY, Set.of())) {
+            for (String name : Sync.apps(MainActivity.this, listId)) {
+                String pkg = name.split("#")[0];
                 String label = name;
                 String icon = null;
                 try {
-                    label = pm.getApplicationLabel(pm.getApplicationInfo(name, 0)).toString();
-                    icon = dataUrl(pm.getApplicationIcon(name));
+                    label = VARIANTS.containsKey(name)
+                            ? VARIANTS.get(name)
+                            : pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+                    icon = dataUrl(pm.getApplicationIcon(pkg));
                 } catch (PackageManager.NameNotFoundException ignored) {
                     // uninstalled since: keep the package name so it can still be removed
                 }
@@ -180,51 +195,104 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void removeApp(String id) {
-            Set<String> chosen = new HashSet<>(Sync.prefs(MainActivity.this).getStringSet(Sync.APPS_KEY, Set.of()));
+        public void removeApp(String listId, String id) {
+            if (lockedNow()) return;
+            Set<String> chosen = new HashSet<>(Sync.apps(MainActivity.this, listId));
             chosen.remove(id);
-            Sync.prefs(MainActivity.this).edit().putStringSet(Sync.APPS_KEY, chosen).apply();
+            Sync.setApps(MainActivity.this, listId, chosen);
         }
 
         @JavascriptInterface
-        public void pickApps() {
-            runOnUiThread(MainActivity.this::pickApps);
+        public void pickApps(String listId) {
+            runOnUiThread(() -> MainActivity.this.pickApps(listId));
+        }
+
+        /** Where the phone last was, as {"lat","lon"}, or "" when unknown; asks for location access on the way. */
+        @JavascriptInterface
+        public String here() {
+            runOnUiThread(MainActivity.this::askLocation);
+            Location at = MainActivity.this.lastFix();
+            return at == null ? "" : "{\"lat\":" + at.getLatitude() + ",\"lon\":" + at.getLongitude() + "}";
+        }
+
+        @JavascriptInterface
+        public boolean hasUsageAccess() {
+            return Sync.hasUsageAccess(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void openUsageAccess() {
+            startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
         }
     }
 
-    /** Apps are per device: the choice lives in this phone's prefs and follows the synced lists' schedules. */
-    private void pickApps() {
+    /** Whether a list that locks itself is inside its hours: nothing that loosens blocking may change then. */
+    private boolean lockedNow() {
+        Rules rules = Sync.rules(this);
+        boolean locked = rules != null && rules.protectedNow(LocalDateTime.now());
+        if (locked) Toast.makeText(this, "Locked until the scheduled hours end.", Toast.LENGTH_LONG).show();
+        return locked;
+    }
+
+    /** Apps are per device and per list: the choice lives in this phone's prefs and follows that list's hours and places. */
+    private void pickApps(String listId) {
         PackageManager pm = getPackageManager();
         Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> found = pm.queryIntentActivities(launcher, 0);
         found.removeIf(r -> r.activityInfo.packageName.equals(getPackageName()));
         found.sort((a, b) -> a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()));
-        Set<String> chosen = new HashSet<>(Sync.prefs(this).getStringSet(Sync.APPS_KEY, Set.of()));
-        CharSequence[] labels = new CharSequence[found.size()];
-        boolean[] checked = new boolean[found.size()];
+        Set<String> before = Sync.apps(this, listId);
+        Set<String> chosen = new HashSet<>(before);
+        // The parts of an app come first, then every installed app.
+        List<String> entries = new ArrayList<>(VARIANTS.keySet());
+        List<CharSequence> labels = new ArrayList<>(VARIANTS.values());
         int size = dp(32);
-        for (int i = 0; i < labels.length; i++) {
+        for (ResolveInfo r : found) {
             // The icon rides in the label as a span: the dialog's own rows already put the checkbox at the start.
-            Drawable icon = found.get(i).loadIcon(pm);
+            Drawable icon = r.loadIcon(pm);
             icon.setBounds(0, 0, size, size);
-            SpannableString label = new SpannableString("  " + found.get(i).loadLabel(pm));
+            SpannableString label = new SpannableString("  " + r.loadLabel(pm));
             label.setSpan(new CenteredIcon(icon), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            labels[i] = label;
-            checked[i] = chosen.contains(found.get(i).activityInfo.packageName);
+            entries.add(r.activityInfo.packageName);
+            labels.add(label);
         }
+        boolean[] checked = new boolean[entries.size()];
+        for (int i = 0; i < checked.length; i++) checked[i] = chosen.contains(entries.get(i));
         new AlertDialog.Builder(this)
                 .setTitle("Blocked apps on this device")
-                .setMultiChoiceItems(labels, checked, (d, which, on) -> {
-                    String name = found.get(which).activityInfo.packageName;
-                    if (on) chosen.add(name);
-                    else chosen.remove(name);
+                .setMultiChoiceItems(labels.toArray(new CharSequence[0]), checked, (d, which, on) -> {
+                    if (on) chosen.add(entries.get(which));
+                    else chosen.remove(entries.get(which));
                 })
                 .setPositiveButton("Save", (d, w) -> {
-                    Sync.prefs(this).edit().putStringSet(Sync.APPS_KEY, chosen).apply();
+                    // Adding blocks more; dropping an app would be a way out of a lock.
+                    if (!chosen.containsAll(before) && lockedNow()) return;
+                    Sync.setApps(this, listId, chosen);
                     web.evaluateJavascript("window.dispatchEvent(new Event('focuser-apps'))", null);
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    /** Asks for location access, "all the time" last: blocking runs in the background and needs it there too. */
+    private void askLocation() {
+        String[] needed = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
+        if (checkSelfPermission(needed[0]) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(needed, 1);
+        } else if (checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, 2);
+        }
+    }
+
+    private Location lastFix() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null;
+        LocationManager manager = getSystemService(LocationManager.class);
+        Location here = null;
+        for (String provider : manager.getProviders(true)) {
+            Location last = manager.getLastKnownLocation(provider);
+            if (last != null && (here == null || last.getTime() > here.getTime())) here = last;
+        }
+        return here;
     }
 
     @Override

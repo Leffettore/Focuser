@@ -1,5 +1,6 @@
 import { Ban, BarChart3, CalendarDays, Clock, Globe } from "lucide-react";
 import { useMemo, useState } from "react";
+import { DeviceUsageSection } from "@/components/device-usage";
 import { TargetIndividual, TargetOverlay } from "@/components/target-breakdown";
 import { Badge } from "@/components/ui/badge";
 import { Card, EmptyState, PageHeader, Section } from "@/components/ui/card";
@@ -217,6 +218,8 @@ export function Statistics() {
 
         <InlineError error={clear.error} />
       </QueryState>
+
+      <DeviceUsageSection range={range} />
     </Page>
   );
 }

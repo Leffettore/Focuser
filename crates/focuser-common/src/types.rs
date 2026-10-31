@@ -25,6 +25,15 @@ pub struct BlockList {
     pub lock: Option<Lock>,
     pub protection: Option<Protection>,
     pub schedule: Option<Schedule>,
+    /// Hours for one device (by device name), replacing `schedule` there; the rules are shared.
+    #[serde(default)]
+    pub device_schedules: std::collections::BTreeMap<String, Schedule>,
+    /// No all-devices schedule: only devices with their own entry run this list.
+    #[serde(default)]
+    pub only_devices: bool,
+    /// Where the list blocks or never blocks (the phone only); empty means everywhere.
+    #[serde(default)]
+    pub locations: Vec<Location>,
     /// JSON defaults migrate existing lists to unprotected schedules.
     #[serde(default)]
     pub scheduled_protection: Option<ScheduledProtection>,
@@ -52,6 +61,9 @@ impl BlockList {
             lock: None,
             protection: None,
             schedule: None,
+            device_schedules: Default::default(),
+            only_devices: false,
+            locations: Vec::new(),
             scheduled_protection: None,
             schedule_unlocked_until: None,
             breaks: None,
@@ -682,6 +694,24 @@ pub struct Schedule {
     pub enabled: bool,
 }
 
+/// A circle on the map where a list blocks, or never blocks.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+pub struct Location {
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub radius_m: u32,
+    pub mode: LocationMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub enum LocationMode {
+    /// Block here; with any of these, the list blocks only inside one.
+    Block,
+    /// Never block here.
+    Skip,
+}
+
 /// A time range on a specific day of the week.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct TimeSlot {
@@ -949,4 +979,20 @@ mod protection_tests {
         assert!(p.is_active());
         assert_eq!(p.remaining_seconds(), None);
     }
+}
+
+/// Time spent on one app or site on one device in one day.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct DeviceUsage {
+    pub device: String,
+    /// `YYYY-MM-DD`, in the device's local time.
+    pub date: String,
+    /// Package, executable or domain.
+    pub target: String,
+    /// Friendly name when the device knows one (an app's label), else empty.
+    #[serde(default)]
+    pub label: String,
+    // A day has 86,400 seconds; `number` is exact.
+    #[specta(type = specta_typescript::Number)]
+    pub seconds: i64,
 }

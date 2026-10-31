@@ -111,6 +111,12 @@ export type BlockList = {
 	lock: Lock | null,
 	protection: Protection | null,
 	schedule: Schedule | null,
+	/**  Hours for one device (by device name), replacing `schedule` there; the rules are shared. */
+	device_schedules?: { [key in string]: Schedule },
+	/**  No all-devices schedule: only devices with their own entry run this list. */
+	only_devices?: boolean,
+	/**  Where the list blocks or never blocks (the phone only); empty means everywhere. */
+	locations?: Location[],
 	/**  JSON defaults migrate existing lists to unprotected schedules. */
 	scheduled_protection?: ScheduledProtection | null,
 	/**  Trusted occurrence bypass; never accepted from wholesale list updates. */
@@ -278,6 +284,46 @@ export type Command =
 	list_id: string,
 	slots: TimeSlot[],
 	always_active: boolean,
+	/**  No all-devices schedule: only devices with hours of their own run the list. */
+	none?: boolean,
+} } | 
+/**
+ *  Hours for one device only; the rules stay shared. `same_as_all` drops
+ *  the device's own hours so it follows the list's again; otherwise
+ *  `always_active` or `slots` set them, as in [`Command::UpdateSchedule`].
+ */
+{ cmd: "update_device_schedule"; args: {
+	list_id: string,
+	device: string,
+	slots: TimeSlot[],
+	always_active: boolean,
+	same_as_all: boolean,
+} } | 
+/**  Where a list blocks or never blocks (the phone only). Empty means everywhere. */
+{ cmd: "set_list_locations"; args: {
+	list_id: string,
+	locations: Location[],
+} } | 
+/**  This device's name, as it appears in a list's `device_schedules`. */
+{ cmd: "get_device_name" } | 
+/**
+ *  A device's time per app or site, as that device counted it. Sending
+ *  the same rows again changes nothing.
+ */
+{ cmd: "report_usage"; args: {
+	rows: DeviceUsage[],
+} } | 
+/**
+ *  A device says it syncs with this server, so it is listed even before it
+ *  has hours or usage of its own.
+ */
+{ cmd: "report_device"; args: {
+	device: string,
+} } | 
+/**  Every device that has synced with this server. */
+{ cmd: "get_devices" } | { cmd: "get_device_usage"; args: {
+	from: string,
+	to: string,
 } } | { cmd: "get_stats"; args: {
 	from: string,
 	to: string,
@@ -405,6 +451,30 @@ export type Command =
 { cmd: "import_configuration"; args: {
 	json: string,
 } } | 
+/**
+ *  Turn a Cold Turkey `.ctbbl` export into a Focuser configuration document
+ *  (returned as text, nothing is imported). `only` names the blocks to take;
+ *  empty means every block.
+ */
+{ cmd: "convert_cold_turkey"; args: {
+	json: string,
+	only: string[],
+} } | 
+/**
+ *  Apply a configuration document fetched from the sync server: lists are
+ *  matched by id, new ones are added, unprotected ones are overwritten and
+ *  protected ones are left for the next round. Nothing is ever deleted.
+ *  Returns a one-line summary.
+ */
+{ cmd: "merge_configuration"; args: {
+	json: string,
+} } | 
+/**
+ *  Fetch the document from the configured `sync_url` and merge it, once.
+ *  The GUI polls without this (it would hold the engine lock during the
+ *  request); it exists for the CLI.
+ */
+{ cmd: "sync_now" } | 
 /**  Delete block lists, rules, schedules, statistics and settings. */
 { cmd: "delete_all_data" } | 
 /**  Would this domain be blocked right now? */
@@ -449,7 +519,7 @@ export type CommandResult =
 /**  Succeeded, nothing to return. */
 { kind: "unit" } | { kind: "block_list"; data: BlockList } | { kind: "block_lists"; data: BlockList[] } | { kind: "website_rule"; data: WebsiteRule } | { kind: "app_rule"; data: AppRule } | { kind: "exception"; data: ExceptionRule } | 
 /**  A number of affected items — e.g. rules imported or cleared. */
-{ kind: "count"; data: number } | { kind: "stats"; data: UsageStat[] } | { kind: "blocked_events"; data: BlockedEvent[] } | { kind: "protection_status"; data: ProtectionInfo[] } | { kind: "scheduled_protection_status"; data: ScheduledProtectionStatus[] } | { kind: "shared_allowance_status"; data: SharedAllowanceStatus[] } | { kind: "blocking_health"; data: BlockingHealth } | 
+{ kind: "count"; data: number } | { kind: "stats"; data: UsageStat[] } | { kind: "device_usage"; data: DeviceUsage[] } | { kind: "device_name"; data: string } | { kind: "devices"; data: string[] } | { kind: "blocked_events"; data: BlockedEvent[] } | { kind: "protection_status"; data: ProtectionInfo[] } | { kind: "scheduled_protection_status"; data: ScheduledProtectionStatus[] } | { kind: "shared_allowance_status"; data: SharedAllowanceStatus[] } | { kind: "blocking_health"; data: BlockingHealth } | 
 /**  A setting value; `None` when unset and no default was supplied. */
 { kind: "setting"; data: string | null } | 
 /**  A yes/no outcome — e.g. "was a session actually paused". */
@@ -458,6 +528,18 @@ export type CommandResult =
 { kind: "pomodoro_status"; data: PomodoroStatus | null } | { kind: "pomodoro_session"; data: PomodoroSession } | { kind: "pomodoro_events"; data: PomodoroEventDto[] } | { kind: "pomodoro_history"; data: PomodoroHistoryEntry[] } | { kind: "pomodoro_presets"; data: PomodoroPreset[] } | { kind: "allowance"; data: Allowance } | { kind: "allowances"; data: AllowanceStatus[] } | { kind: "allowance_notifications"; data: AllowanceNotificationDto[] } | { kind: "allowance_history"; data: AllowanceUsageEntry[] } | 
 /**  Free text — an exported configuration document, or a version string. */
 { kind: "text"; data: string } | { kind: "browser_status"; data: BrowserStatus[] } | { kind: "app_icons"; data: AppIcon[] };
+
+/**  Time spent on one app or site on one device in one day. */
+export type DeviceUsage = {
+	device: string,
+	/**  `YYYY-MM-DD`, in the device's local time. */
+	date: string,
+	/**  Package, executable or domain. */
+	target: string,
+	/**  Friendly name when the device knows one (an app's label), else empty. */
+	label?: string,
+	seconds: number,
+};
 
 export type ExceptionRule = {
 	id: string,
@@ -477,6 +559,21 @@ export type ExceptionType =
 ({ Wildcard: string }) & { Domain?: never; UrlPath?: never } | 
 /**  Allow local file:// URLs */
 "LocalFiles";
+
+/**  A circle on the map where a list blocks, or never blocks. */
+export type Location = {
+	name: string,
+	lat: number | null,
+	lon: number | null,
+	radius_m: number,
+	mode: LocationMode,
+};
+
+export type LocationMode = 
+/**  Block here; with any of these, the list blocks only inside one. */
+"Block" | 
+/**  Never block here. */
+"Skip";
 
 /**
  *  How a protection window can be ended early — Cold Turkey calls this a
