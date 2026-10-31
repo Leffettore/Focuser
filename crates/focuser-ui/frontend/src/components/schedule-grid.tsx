@@ -88,7 +88,7 @@ export function ScheduleGrid({
   );
 
   return (
-    <div className="-mx-1 overflow-x-auto px-1 pb-1">
+    <div className="relative -mx-1 overflow-x-auto px-1 pb-1">
       {/* `table-fixed` is load-bearing. Auto layout sizes each column to its
           own heading, so the hours showing "12am" came out wide and the ones
           showing a dot came out narrow — 24 supposedly equal hours rendered at
