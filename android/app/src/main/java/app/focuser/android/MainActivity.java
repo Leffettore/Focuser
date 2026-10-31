@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
     // Parts of an app that can be blocked on their own; the key is stored in the list's app set.
     private static final java.util.Map<String, String> VARIANTS = new java.util.LinkedHashMap<>();
     static {
+        VARIANTS.put("com.instagram.android#dms", "Instagram – everything but DMs");
         VARIANTS.put("com.instagram.android#reels", "Instagram – Reels only");
         VARIANTS.put("com.google.android.youtube#shorts", "YouTube – Shorts only");
     }

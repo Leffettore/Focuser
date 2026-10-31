@@ -43,10 +43,10 @@ public final class BlockService extends AccessibilityService {
     // no entry is blocked everywhere. Facebook needs no entry: its messages live in Messenger, a separate app that is
     // simply not blocked. ponytail: Instagram's view ids were checked on one release and may change; re-dump them
     // with `adb shell uiautomator dump` when posts, stories or reels stop being blocked.
-    // An entry `package#variant` blocks just that part of the app. ponytail: the YouTube ids are a guess from one
-    // release; re-dump with `adb shell uiautomator dump` while a Short plays if they stop matching.
+    // A plain package entry blocks the whole app; `package#variant` blocks just that part of it.
+    // ponytail: the YouTube ids were checked on one release (re-dump while a Short plays if they stop matching).
     private static final Map<String, Pattern> BLOCKED_SCREENS = Map.of(
-            "com.instagram.android", Pattern.compile("row_feed|media_group|reels_tray_container|clips_viewer|clips_media|clips_video|reel_viewer"),
+            "com.instagram.android#dms", Pattern.compile("row_feed|media_group|reels_tray_container|clips_viewer|clips_media|clips_video|reel_viewer"),
             "com.instagram.android#reels", Pattern.compile("clips_viewer|clips_media|clips_video|reel_viewer"),
             "com.google.android.youtube#shorts", Pattern.compile("reel_recycler|reel_player|shorts_player|reel_watch"));
 
