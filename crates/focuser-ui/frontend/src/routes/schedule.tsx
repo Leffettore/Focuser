@@ -113,6 +113,7 @@ export function Schedule() {
   const now = new Date();
   const today = DAYS[(now.getDay() + 6) % 7];
   const running =
+    list?.enabled === true &&
     savedMode === "scheduled" &&
     saved.size < WEEK_HOURS &&
     saved.has(cellKey(today, now.getHours()));

@@ -1275,7 +1275,8 @@ fn ensure_not_running(list: &BlockList, schedule: Option<&Schedule>) -> CommandO
         .schedule_unlocked_until
         .is_some_and(|t| t > chrono::Utc::now());
     match schedule {
-        Some(s) if !unlocked && s.is_active_now() && !s.never_ends() => {
+        // A list that is off blocks nothing, so there is nothing to dodge.
+        Some(s) if list.enabled && !unlocked && s.is_active_now() && !s.never_ends() => {
             Err(CommandError::Validation(
                 "these hours are running right now; change them when they end".into(),
             ))
@@ -2562,6 +2563,25 @@ mod tests {
             lists(&ctx)[0].schedule.is_some(),
             "a refused edit changes nothing"
         );
+
+        // A list that is switched off blocks nothing, so its hours can change.
+        execute(
+            &ctx,
+            Command::ToggleBlockList {
+                id: list.id,
+                enabled: false,
+            },
+        )
+        .unwrap();
+        execute(&ctx, hours(vec![], false)).unwrap();
+        execute(
+            &ctx,
+            Command::ToggleBlockList {
+                id: list.id,
+                enabled: true,
+            },
+        )
+        .unwrap();
 
         // Another device's hours are separate, and never refused by this one's.
         let phone = |same_as_all| Command::UpdateDeviceSchedule {
