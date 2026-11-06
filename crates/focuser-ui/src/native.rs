@@ -126,8 +126,17 @@ pub fn detect_running_browsers() -> std::collections::HashSet<focuser_common::ex
     std::collections::HashSet::new()
 }
 
+/// On Linux the updater overwrites the running executable with an AppImage, which
+/// bricks a source build or distro package. Only AppImage runs may self-update.
+fn can_self_update() -> bool {
+    !cfg!(target_os = "linux") || std::env::var_os("APPIMAGE").is_some()
+}
+
 #[tauri::command]
 pub async fn check_for_update(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    if !can_self_update() {
+        return Ok(serde_json::json!({ "available": false }));
+    }
     let updater = app.updater_builder().build().map_err(|e| e.to_string())?;
     match updater.check().await {
         Ok(Some(update)) => Ok(serde_json::json!({
@@ -142,6 +151,9 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<serde_json::Value
 
 #[tauri::command]
 pub async fn do_update(app: tauri::AppHandle) -> Result<(), String> {
+    if !can_self_update() {
+        return Err("This install cannot update itself; reinstall instead".into());
+    }
     let updater = app.updater_builder().build().map_err(|e| e.to_string())?;
     let update = updater
         .check()

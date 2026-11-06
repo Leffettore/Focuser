@@ -29,7 +29,9 @@ jobs:
           - os: macos-latest
             platform: macos-arm
             target: aarch64-apple-darwin
-          - os: ubuntu-latest
+          # Oldest runner on purpose: the AppImage bundles the build host's libs, so a
+          # newer host (ubuntu-latest moved to glibc 2.43) breaks older distros.
+          - os: ubuntu-22.04
             platform: linux
             target: x86_64-unknown-linux-gnu
 
