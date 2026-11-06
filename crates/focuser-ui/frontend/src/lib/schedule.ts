@@ -1,4 +1,5 @@
 import type { Schedule, TimeSlot } from "@/bindings";
+import { uses24Hour } from "./clock";
 
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export type Day = (typeof DAYS)[number];
@@ -179,6 +180,7 @@ function fill(days: Day[], hours: number[]): Set<CellKey> {
 }
 
 export function formatHour(hour: number) {
+  if (uses24Hour()) return `${pad(hour)}:00`;
   if (hour === 0) return "12am";
   if (hour === 12) return "12pm";
   return hour < 12 ? `${hour}am` : `${hour - 12}pm`;

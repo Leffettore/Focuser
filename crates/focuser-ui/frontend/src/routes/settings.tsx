@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { FolderOpen, Play, RotateCcw } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { BrowserStatusList } from "@/components/browser-status";
 import { ConfigTransfer } from "@/components/config-transfer";
@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { UpdateCheck } from "@/components/update-check";
 import { useAutostart } from "@/lib/autostart";
+import { setUses24Hour, uses24Hour } from "@/lib/clock";
 import {
   useAppVersion,
   useDeleteAllData,
@@ -51,6 +52,8 @@ export function Settings() {
   const phaseSound = useBooleanSetting(SETTING_KEYS.phaseSound, false);
   const soundVolume = useNumberSetting(SETTING_KEYS.phaseSoundVolume, 70);
   const language = useLanguage();
+  const [clock24, setClock24] = useState(uses24Hour);
+  const android = isAndroidApp();
 
   // A lock can tighten these but never loosen them (#18).
   const locks = useProtectionStatus().data ?? [];
@@ -83,30 +86,35 @@ export function Settings() {
     <Page>
       <PageHeader title={m.settings_title()} description={m.settings_description()} />
 
-      <SettingsSection title={m.settings_section_startup()}>
-        <SettingRow
-          label={m.settings_autostart()}
-          description={
-            autostartLocked
-              ? m.settings_locked()
-              : autostart.needsAdmin
-                ? m.settings_autostart_pending()
-                : autostart.supported
-                  ? m.settings_autostart_description()
-                  : m.settings_autostart_unsupported()
-          }
-          control={
-            <Switch
-              checked={autostart.value}
-              onCheckedChange={autostart.set}
-              disabled={
-                !autostart.supported || autostart.isPending || autostart.isSaving || autostartLocked
-              }
-              aria-label={m.settings_autostart()}
-            />
-          }
-        />
-      </SettingsSection>
+      {!android && (
+        <SettingsSection title={m.settings_section_startup()}>
+          <SettingRow
+            label={m.settings_autostart()}
+            description={
+              autostartLocked
+                ? m.settings_locked()
+                : autostart.needsAdmin
+                  ? m.settings_autostart_pending()
+                  : autostart.supported
+                    ? m.settings_autostart_description()
+                    : m.settings_autostart_unsupported()
+            }
+            control={
+              <Switch
+                checked={autostart.value}
+                onCheckedChange={autostart.set}
+                disabled={
+                  !autostart.supported ||
+                  autostart.isPending ||
+                  autostart.isSaving ||
+                  autostartLocked
+                }
+                aria-label={m.settings_autostart()}
+              />
+            }
+          />
+        </SettingsSection>
+      )}
 
       <SettingsSection
         title={m.settings_section_browsers()}
@@ -178,13 +186,15 @@ export function Settings() {
         />
       </SettingsSection>
 
-      <SettingsSection
-        title={m.settings_section_extension()}
-        description={`${m.settings_extension_description()} ${m.settings_extension_chromium()}`}
-        flush
-      >
-        <BrowserStatusList />
-      </SettingsSection>
+      {!android && (
+        <SettingsSection
+          title={m.settings_section_extension()}
+          description={`${m.settings_extension_description()} ${m.settings_extension_chromium()}`}
+          flush
+        >
+          <BrowserStatusList />
+        </SettingsSection>
+      )}
 
       <SettingsSection title={m.settings_section_focus()}>
         <SettingRow
@@ -304,6 +314,27 @@ export function Settings() {
               size="sm"
               disabled={language.isPending}
               aria-label={m.settings_language()}
+            />
+          }
+        />
+        <SettingRow
+          label={m.settings_time_format()}
+          htmlFor="time-format"
+          description={m.settings_time_format_description()}
+          control={
+            <Select
+              id="time-format"
+              value={clock24 ? "24" : "12"}
+              onValueChange={(v: string) => {
+                setUses24Hour(v === "24");
+                setClock24(v === "24");
+              }}
+              options={[
+                { value: "12", label: m.settings_time_12h() },
+                { value: "24", label: m.settings_time_24h() },
+              ]}
+              size="sm"
+              aria-label={m.settings_time_format()}
             />
           }
         />

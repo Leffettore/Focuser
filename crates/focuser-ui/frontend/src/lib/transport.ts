@@ -50,7 +50,9 @@ export const transportKind: "tauri" | "devserver" = isTauri() ? "tauri" : "devse
  */
 export async function send<TResult>(command: unknown): Promise<TResult> {
   if (isTauri()) return sendViaTauri<TResult>(command);
-  return typeof androidBridge()?.command === "function" ? sendViaAndroid<TResult>(command) : sendViaHttp<TResult>(command);
+  return typeof androidBridge()?.command === "function"
+    ? sendViaAndroid<TResult>(command)
+    : sendViaHttp<TResult>(command);
 }
 
 interface AndroidCommandBridge {
