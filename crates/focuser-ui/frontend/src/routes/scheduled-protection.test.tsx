@@ -92,7 +92,16 @@ beforeEach(() => {
 
     switch (cmd.cmd) {
       case "list_block_lists":
-        return { kind: "block_lists", data: structuredClone(lists) };
+        // The page reads each device's hours; these tests model one device, the phone.
+        return {
+          kind: "block_lists",
+          data: structuredClone(lists).map((l) => ({
+            ...l,
+            device_schedules: {
+              phone: l.schedule ?? { id: "always", name: l.name, enabled: false, time_slots: [] },
+            },
+          })),
+        };
       case "get_scheduled_protection_status":
         return {
           kind: "scheduled_protection_status",
@@ -167,7 +176,7 @@ beforeEach(() => {
         return { kind: "unit" };
       case "enable_protection":
         return { kind: "unit" };
-      case "update_schedule":
+      case "update_device_schedule":
         stored.schedule = cmd.args.always_active
           ? null
           : { id: "s", name: stored.name, enabled: true, time_slots: cmd.args.slots };
@@ -669,7 +678,7 @@ describe("the schedule page", () => {
 
     const message = within(screen.getByRole("alertdialog", { name: "This schedule needs a gap" }));
     expect(message.getByText(/Weekly locks during its schedule/)).toBeVisible();
-    expect(sent("update_schedule")).toHaveLength(0);
+    expect(sent("update_device_schedule")).toHaveLength(0);
     fireEvent.click(message.getByRole("button", { name: "OK" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
@@ -680,7 +689,7 @@ describe("the schedule page", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Every hour" }));
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
 
-    await waitFor(() => expect(sent("update_schedule")).toHaveLength(1));
+    await waitFor(() => expect(sent("update_device_schedule")).toHaveLength(1));
   });
 });
 

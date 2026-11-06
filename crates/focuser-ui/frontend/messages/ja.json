@@ -488,8 +488,8 @@
   "schedule_needs_gap_title": "このスケジュールには空き時間が必要です",
   "schedule_needs_gap_body": "{name} はスケジュール中にロックされるか、共有時間枠があります。どちらも週に空き時間が必要です。空き時間を作るか、先にそれらをオフにしてください。",
   "schedule_device_all": "すべてのデバイス",
-  "schedule_mode_same": "すべてのデバイスと同じ",
-  "schedule_same_body": "このデバイスは、すべてのデバイスに設定した時間帯に従います。",
+  "schedule_mode_same": "オフ",
+  "schedule_same_body": "このデバイスではこのリストを実行しません。",
   "statistics_by_device": "デバイス別の利用時間",
   "statistics_by_device_empty": "まだ利用状況が届いていません。デバイスは同期時に利用状況を送信します。",
   "statistics_total": "合計",
@@ -517,5 +517,10 @@
   "schedule_other_device": "{device} から変更してください。",
   "schedule_this_device": "このデバイスは…",
   "schedule_location_reuse": "再利用",
-  "schedule_location_use_here": "現在地を使う"
+  "schedule_location_use_here": "現在地を使う",
+  "dashboard_week_title": "今週",
+  "dashboard_week_description": "各リストがいつ、どのデバイスでブロックを始めるか。",
+  "dashboard_week_always": "常時オン",
+  "dashboard_week_empty": "時間帯はまだありません。スケジュールページでデバイスごとに設定してください。",
+  "dashboard_week_places": "場所（スマートフォンのみ）"
 }

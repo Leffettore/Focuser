@@ -504,8 +504,8 @@
   "schedule_needs_gap_title": "Este horario necesita un hueco",
   "schedule_needs_gap_body": "{name} se bloquea durante su horario o tiene tiempo compartido. Ambos necesitan un hueco en la semana. Deja un hueco o desactívalos primero.",
   "schedule_device_all": "Todos los dispositivos",
-  "schedule_mode_same": "Igual que todos los dispositivos",
-  "schedule_same_body": "Este dispositivo sigue el horario definido para todos los dispositivos.",
+  "schedule_mode_same": "Desactivada",
+  "schedule_same_body": "Este dispositivo no ejecuta esta lista.",
   "statistics_by_device": "Tiempo por dispositivo",
   "statistics_by_device_empty": "Aún no se ha informado de ningún uso. Los dispositivos envían su uso al sincronizar.",
   "statistics_total": "Total",
@@ -533,5 +533,10 @@
   "schedule_other_device": "Cámbialo desde {device}.",
   "schedule_this_device": "Este dispositivo es…",
   "schedule_location_reuse": "Reutilizar",
-  "schedule_location_use_here": "Usar mi ubicación"
+  "schedule_location_use_here": "Usar mi ubicación",
+  "dashboard_week_title": "Esta semana",
+  "dashboard_week_description": "Cuándo empieza a bloquear cada lista y en qué dispositivo.",
+  "dashboard_week_always": "Siempre activa",
+  "dashboard_week_empty": "Aún no hay horarios. Defínelos por dispositivo en la página Horario.",
+  "dashboard_week_places": "Lugares (solo teléfono)"
 }

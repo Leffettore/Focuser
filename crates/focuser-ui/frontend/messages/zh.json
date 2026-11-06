@@ -488,8 +488,8 @@
   "schedule_needs_gap_title": "该时间表需要空档",
   "schedule_needs_gap_body": "{name} 会在计划期间锁定，或设有共享使用时长。两者都需要一周内有空档。请留出空档，或先关闭它们。",
   "schedule_device_all": "所有设备",
-  "schedule_mode_same": "与所有设备相同",
-  "schedule_same_body": "此设备遵循为所有设备设置的时间。",
+  "schedule_mode_same": "关闭",
+  "schedule_same_body": "此设备不运行此列表。",
   "statistics_by_device": "按设备统计时间",
   "statistics_by_device_empty": "尚无使用数据。设备在同步时会发送其使用情况。",
   "statistics_total": "总计",
@@ -517,5 +517,10 @@
   "schedule_other_device": "请在 {device} 上修改。",
   "schedule_this_device": "此设备是…",
   "schedule_location_reuse": "复用",
-  "schedule_location_use_here": "使用我的位置"
+  "schedule_location_use_here": "使用我的位置",
+  "dashboard_week_title": "本周",
+  "dashboard_week_description": "每个列表何时在哪台设备上开始拦截。",
+  "dashboard_week_always": "始终开启",
+  "dashboard_week_empty": "尚未设置时间。请在“计划”页面按设备设置。",
+  "dashboard_week_places": "地点（仅限手机）"
 }

@@ -10,6 +10,7 @@ import { ListSkeleton, StatGridSkeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip } from "@/components/ui/tooltip";
+import { WeekCalendar } from "@/components/week-calendar";
 import { useBlockLists, useProtectionStatus, useStats, useToggleBlockList } from "@/lib/commands";
 import { rangeFor } from "@/lib/date-range";
 import { formatDuration } from "@/lib/duration";
@@ -87,6 +88,10 @@ export function Dashboard() {
       <div className="mt-7">
         <FocusSession lists={all} />
       </div>
+
+      <Section title={m.dashboard_week_title()} description={m.dashboard_week_description()}>
+        <WeekCalendar lists={all} />
+      </Section>
 
       <Section
         title={m.dashboard_lists_title()}

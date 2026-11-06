@@ -496,8 +496,8 @@
   "schedule_needs_gap_title": "This schedule needs a gap",
   "schedule_needs_gap_body": "{name} locks during its schedule or has a shared allowance. Both need a gap in the week. Leave a gap, or turn those off first.",
   "schedule_device_all": "All devices",
-  "schedule_mode_same": "Same as all devices",
-  "schedule_same_body": "This device follows the hours set for all devices.",
+  "schedule_mode_same": "Off",
+  "schedule_same_body": "This device does not run this list.",
   "statistics_by_device": "Time by device",
   "statistics_by_device_empty": "No usage reported yet. Devices send their usage when they sync.",
   "statistics_total": "Total",
@@ -525,5 +525,10 @@
   "schedule_other_device": "Change this from {device}.",
   "schedule_this_device": "This device is…",
   "schedule_location_reuse": "Reuse",
-  "schedule_location_use_here": "Use my location"
+  "schedule_location_use_here": "Use my location",
+  "dashboard_week_title": "This week",
+  "dashboard_week_description": "When each list starts blocking, and on which device.",
+  "dashboard_week_always": "Always on",
+  "dashboard_week_empty": "No hours yet. Set them per device on the Schedule page.",
+  "dashboard_week_places": "Places (phone only)"
 }

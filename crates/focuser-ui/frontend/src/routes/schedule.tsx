@@ -28,7 +28,6 @@ import {
   useDeviceUsage,
   useThisDevice,
   useUpdateDeviceSchedule,
-  useUpdateSchedule,
 } from "@/lib/commands";
 import { rangeFor } from "@/lib/date-range";
 import { formatDuration } from "@/lib/duration";
@@ -61,13 +60,10 @@ const PRESET_ICONS: Record<string, ReactNode> = {
 
 export function Schedule() {
   const lists = useBlockLists();
-  const saveShared = useUpdateSchedule();
   const saveDevice = useUpdateDeviceSchedule();
   const last30 = useMemo(() => rangeFor("30d"), []);
   const usage = useDeviceUsage(last30.from, last30.to);
   const known = useDevices();
-  // "" is every device that has no hours of its own.
-  const [device, setDevice] = useState("");
   const me = useThisDevice();
   // "Set schedule" and "Edit schedule" on a list card land here with that list
   // named in the address, so the page opens on it instead of on the first one.
@@ -77,27 +73,30 @@ export function Schedule() {
   // and the "always active" panel has nowhere to set them.
   const gridFor = params.get("set") === "hours" ? params.get("list") : null;
   const [needsGap, setNeedsGap] = useState(false);
+  const [picked, setPicked] = useState(() => params.get("device") ?? "");
 
   const all = lists.data ?? [];
   const selected = resolveSelected(all, rawSelected);
   const list = all.find((l) => l.id === selected);
 
-  // A device's own hours replace the list's on that device only. "Always" is
-  // stored there as a disabled schedule, and no entry means "same as all".
-  const own = device ? list?.device_schedules?.[device] : undefined;
-  const shown = device ? (own?.enabled ? own : undefined) : list?.schedule;
+  const devices = [
+    ...new Set([
+      "phone",
+      ...(me.device ? [me.device] : []),
+      ...(known.data ?? []),
+      ...(usage.data ?? []).map((u) => u.device),
+      ...Object.keys(list?.device_schedules ?? {}),
+    ]),
+  ];
+
+  const device = picked || me.device || devices[0];
+
+  // Every device has its own hours. "Always" is
+  // stored there as a disabled schedule, and no entry means the device does not run the list.
+  const own = list?.device_schedules?.[device];
+  const shown = own?.enabled ? own : undefined;
   const saved = useMemo(() => slotsToCells(shown?.time_slots ?? []), [shown]);
-  const savedMode: Mode = device
-    ? !own
-      ? "same"
-      : shown
-        ? "scheduled"
-        : "always"
-    : list?.only_devices
-      ? "none"
-      : shown
-        ? "scheduled"
-        : "always";
+  const savedMode: Mode = !own ? "off" : shown ? "scheduled" : "always";
 
   const [draft, setDraft] = useState<Set<CellKey>>(saved);
   const [mode, setMode] = useState<Mode>("always");
@@ -109,33 +108,21 @@ export function Schedule() {
     setMode(savedMode === "always" && listId === gridFor ? "scheduled" : savedMode);
   }, [saved, savedMode, listId, gridFor]);
 
-  // Hours are edited from the device they belong to, and not while they run:
-  // cutting them short is how a block gets dodged. The command core refuses a
-  // running edit too; the other-device rule is the screen's only (ponytail: no
-  // auth on /command, so a determined caller can still set another device's hours).
+  // Not while they run: cutting them short is how a block gets dodged. The
+  // command core refuses a running edit too.
   const now = new Date();
   const today = DAYS[(now.getDay() + 6) % 7];
   const running =
     savedMode === "scheduled" &&
     saved.size < WEEK_HOURS &&
     saved.has(cellKey(today, now.getHours()));
-  const foreign = device !== "" && device !== me.device;
-  const locked = foreign || running;
+  const locked = running;
   const dirty =
     !locked &&
     list != null &&
     (mode !== savedMode || (mode === "scheduled" && !sameCells(draft, saved)));
 
-  const save = device ? saveDevice : saveShared;
-  const devices = [
-    ...new Set([
-      "phone",
-      ...(me.device ? [me.device] : []),
-      ...(known.data ?? []),
-      ...(usage.data ?? []).map((u) => u.device),
-      ...Object.keys(list?.device_schedules ?? {}),
-    ]),
-  ];
+  const save = saveDevice;
 
   // A scheduled lock and a shared allowance last for one block of hours, so a
   // list that has either cannot be saved as on all week. The command core
@@ -145,25 +132,16 @@ export function Schedule() {
 
   function commit() {
     if (!list) return;
-    if (device) {
-      saveDevice.mutate({
-        listId: list.id,
-        device,
-        slots: mode === "scheduled" ? cellsToSlots(draft) : [],
-        alwaysActive: mode === "always",
-        sameAsAll: mode === "same",
-      });
-      return;
-    }
-    if (followsHours && !leavesGap) {
+    if (mode !== "off" && followsHours && !leavesGap) {
       setNeedsGap(true);
       return;
     }
-    saveShared.mutate({
+    saveDevice.mutate({
       listId: list.id,
+      device,
       slots: mode === "scheduled" ? cellsToSlots(draft) : [],
       alwaysActive: mode === "always",
-      none: mode === "none",
+      sameAsAll: mode === "off",
     });
   }
 
@@ -191,11 +169,8 @@ export function Schedule() {
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Tabs
                 value={device}
-                onChange={setDevice}
-                items={[
-                  { id: "", label: m.schedule_device_all() },
-                  ...devices.map((d) => ({ id: d, label: d })),
-                ]}
+                onChange={setPicked}
+                items={devices.map((d) => ({ id: d, label: d }))}
               />
               {me.choose && (
                 <select
@@ -218,16 +193,13 @@ export function Schedule() {
               value={mode}
               onChange={(next) => !locked && setMode(next)}
               items={[
-                ...(device ? [{ id: "same" as const, label: m.schedule_mode_same() }] : []),
-                ...(device ? [] : [{ id: "none" as const, label: m.schedule_mode_none() }]),
+                { id: "off" as const, label: m.schedule_mode_same() },
                 { id: "always" as const, label: m.schedule_mode_always() },
                 { id: "scheduled" as const, label: m.schedule_mode_scheduled() },
               ]}
             />
             {locked && (
-              <p className="-mt-2 mb-4 text-muted-foreground text-sm">
-                {foreign ? m.schedule_other_device({ device }) : m.schedule_running()}
-              </p>
+              <p className="-mt-2 mb-4 text-muted-foreground text-sm">{m.schedule_running()}</p>
             )}
 
             {/* Editor first, summary under it. Side by side squeezed the grid
@@ -240,11 +212,7 @@ export function Schedule() {
                 >
                   <GridPanel draft={draft} onChange={setDraft} />
                 </div>
-              ) : mode === "none" ? (
-                <Card padding="lg" elevation="raised" className="edge-light">
-                  <p className="text-muted-foreground text-sm">{m.schedule_none_body()}</p>
-                </Card>
-              ) : mode === "same" ? (
+              ) : mode === "off" ? (
                 <Card padding="lg" elevation="raised" className="edge-light">
                   <p className="text-muted-foreground text-sm">{m.schedule_same_body()}</p>
                 </Card>
@@ -300,7 +268,7 @@ export function Schedule() {
   );
 }
 
-type Mode = "none" | "always" | "scheduled" | "same";
+type Mode = "off" | "always" | "scheduled";
 
 function AlwaysPanel() {
   return (

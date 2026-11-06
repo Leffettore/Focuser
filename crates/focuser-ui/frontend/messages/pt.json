@@ -504,8 +504,8 @@
   "schedule_needs_gap_title": "Este horário precisa de um intervalo",
   "schedule_needs_gap_body": "{name} é bloqueada durante o horário ou tem tempo compartilhado. Ambos precisam de um intervalo na semana. Deixe um intervalo ou desative-os primeiro.",
   "schedule_device_all": "Todos os dispositivos",
-  "schedule_mode_same": "Igual a todos os dispositivos",
-  "schedule_same_body": "Este dispositivo segue o horário definido para todos os dispositivos.",
+  "schedule_mode_same": "Desativada",
+  "schedule_same_body": "Este dispositivo não executa esta lista.",
   "statistics_by_device": "Tempo por dispositivo",
   "statistics_by_device_empty": "Ainda não foi reportado nenhum uso. Os dispositivos enviam o seu uso ao sincronizar.",
   "statistics_total": "Total",
@@ -533,5 +533,10 @@
   "schedule_other_device": "Altere-o a partir de {device}.",
   "schedule_this_device": "Este dispositivo é…",
   "schedule_location_reuse": "Reutilizar",
-  "schedule_location_use_here": "Usar minha localização"
+  "schedule_location_use_here": "Usar minha localização",
+  "dashboard_week_title": "Esta semana",
+  "dashboard_week_description": "Quando cada lista começa a bloquear e em qual dispositivo.",
+  "dashboard_week_always": "Sempre ativa",
+  "dashboard_week_empty": "Ainda sem horários. Defina-os por dispositivo na página Agenda.",
+  "dashboard_week_places": "Locais (só no telefone)"
 }

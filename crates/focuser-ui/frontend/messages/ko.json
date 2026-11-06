@@ -488,8 +488,8 @@
   "schedule_needs_gap_title": "이 일정에는 빈 시간이 필요합니다",
   "schedule_needs_gap_body": "{name}은(는) 일정 중에 잠기거나 공유 허용 시간이 있습니다. 둘 다 주중에 빈 시간이 필요합니다. 빈 시간을 두거나 먼저 그 기능을 끄세요.",
   "schedule_device_all": "모든 기기",
-  "schedule_mode_same": "모든 기기와 동일",
-  "schedule_same_body": "이 기기는 모든 기기에 설정된 시간을 따릅니다.",
+  "schedule_mode_same": "끔",
+  "schedule_same_body": "이 기기에서는 이 목록을 실행하지 않습니다.",
   "statistics_by_device": "기기별 사용 시간",
   "statistics_by_device_empty": "아직 보고된 사용 기록이 없습니다. 기기는 동기화할 때 사용 기록을 보냅니다.",
   "statistics_total": "합계",
@@ -517,5 +517,10 @@
   "schedule_other_device": "{device}에서 변경하세요.",
   "schedule_this_device": "이 기기는…",
   "schedule_location_reuse": "재사용",
-  "schedule_location_use_here": "내 위치 사용"
+  "schedule_location_use_here": "내 위치 사용",
+  "dashboard_week_title": "이번 주",
+  "dashboard_week_description": "각 목록이 언제 어느 기기에서 차단을 시작하는지 보여 줍니다.",
+  "dashboard_week_always": "항상 켜짐",
+  "dashboard_week_empty": "아직 시간이 없습니다. 일정 페이지에서 기기별로 설정하세요.",
+  "dashboard_week_places": "장소 (휴대폰 전용)"
 }

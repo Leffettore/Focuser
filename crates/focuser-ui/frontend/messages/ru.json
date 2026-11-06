@@ -512,8 +512,8 @@
   "schedule_needs_gap_title": "Этому расписанию нужен перерыв",
   "schedule_needs_gap_body": "{name} блокируется по расписанию или имеет общий лимит времени. Обоим нужен перерыв в неделе. Оставьте перерыв или сначала отключите их.",
   "schedule_device_all": "Все устройства",
-  "schedule_mode_same": "Как на всех устройствах",
-  "schedule_same_body": "Это устройство следует расписанию, заданному для всех устройств.",
+  "schedule_mode_same": "Выкл.",
+  "schedule_same_body": "Это устройство не использует этот список.",
   "statistics_by_device": "Время по устройствам",
   "statistics_by_device_empty": "Использование пока не передано. Устройства отправляют данные при синхронизации.",
   "statistics_total": "Всего",
@@ -541,5 +541,10 @@
   "schedule_other_device": "Измените это на устройстве {device}.",
   "schedule_this_device": "Это устройство —",
   "schedule_location_reuse": "Использовать",
-  "schedule_location_use_here": "Моё местоположение"
+  "schedule_location_use_here": "Моё местоположение",
+  "dashboard_week_title": "Эта неделя",
+  "dashboard_week_description": "Когда каждый список начинает блокировать и на каком устройстве.",
+  "dashboard_week_always": "Всегда включён",
+  "dashboard_week_empty": "Времени пока нет. Задайте его для каждого устройства на странице «Расписание».",
+  "dashboard_week_places": "Места (только телефон)"
 }

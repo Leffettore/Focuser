@@ -276,6 +276,8 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
             }
             mutate_list(ctx, &mut engine, list_id, |list| {
                 ensure_not_running(list, list.device_schedules.get(&device))?;
+                // Hours live per device now; no entry means this device does not run the list.
+                list.only_devices = true;
                 if same_as_all {
                     list.device_schedules.remove(&device);
                 } else {
@@ -886,6 +888,8 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
                 return Err(CommandError::Validation("device name is empty".into()));
             }
             engine.db().put_device(device)?;
+            give_device_its_own_hours(engine.db(), device)?;
+            engine.refresh()?;
             Ok(CommandResult::Unit)
         }
 
@@ -1119,6 +1123,27 @@ fn prepare_lock(lock: Option<LockSetup>) -> CommandOutcome<Option<Lock>> {
 ///
 /// Every rule command follows this shape; centralising it means the protection
 /// check and the hosts re-sync cannot be forgotten on a new command.
+/// Hours are per device. A list that never had any set per device (`only_devices`
+/// is how a list says it has) hands this device a copy of its old shared hours,
+/// so nothing stops blocking when the schedule moves to the devices.
+fn give_device_its_own_hours(db: &focuser_core::Database, device: &str) -> CommandOutcome<()> {
+    for mut list in db.list_block_lists()? {
+        if list.only_devices || list.device_schedules.contains_key(device) {
+            continue;
+        }
+        let mut hours = list.schedule.clone().unwrap_or_else(|| Schedule {
+            id: focuser_common::types::new_id(),
+            name: format!("{} schedule ({device})", list.name),
+            time_slots: Vec::new(),
+            enabled: false,
+        });
+        hours.id = focuser_common::types::new_id();
+        list.device_schedules.insert(device.to_string(), hours);
+        db.update_block_list(&list)?;
+    }
+    Ok(())
+}
+
 fn mutate_list(
     ctx: &AppContext,
     engine: &mut BlockEngine,
@@ -2559,6 +2584,37 @@ mod tests {
         execute(&ctx, hours(vec![], true)).unwrap();
         let stored = lists(&ctx).remove(0);
         assert!(stored.only_devices && stored.schedule.is_none());
+    }
+
+    #[test]
+    fn reporting_a_device_gives_it_the_old_shared_hours_unless_hours_were_set_per_device() {
+        let ctx = ctx();
+        let list = create(&ctx, "Old");
+        let report = |d: &str| execute(&ctx, Command::ReportDevice { device: d.into() }).unwrap();
+        report("phone");
+        report("laptop");
+        let stored = lists(&ctx).remove(0);
+        assert_eq!(stored.device_schedules.len(), 2);
+        // "Always" is a disabled schedule.
+        assert!(!stored.device_schedules["phone"].enabled);
+        // Taking a device's hours away is a per-device choice that a sync must not undo.
+        execute(
+            &ctx,
+            Command::UpdateDeviceSchedule {
+                list_id: list.id,
+                device: "phone".into(),
+                slots: vec![],
+                always_active: false,
+                same_as_all: true,
+            },
+        )
+        .unwrap();
+        report("phone");
+        report("tablet");
+        let stored = lists(&ctx).remove(0);
+        assert!(stored.only_devices);
+        assert!(!stored.device_schedules.contains_key("phone"));
+        assert!(!stored.device_schedules.contains_key("tablet"));
     }
 
     #[test]

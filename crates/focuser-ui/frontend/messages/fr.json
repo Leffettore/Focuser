@@ -504,8 +504,8 @@
   "schedule_needs_gap_title": "Cet horaire a besoin d'une pause",
   "schedule_needs_gap_body": "{name} se verrouille pendant son horaire ou a un temps partagé. Les deux ont besoin d'une pause dans la semaine. Laissez une pause, ou désactivez-les d'abord.",
   "schedule_device_all": "Tous les appareils",
-  "schedule_mode_same": "Comme tous les appareils",
-  "schedule_same_body": "Cet appareil suit les horaires définis pour tous les appareils.",
+  "schedule_mode_same": "Désactivée",
+  "schedule_same_body": "Cet appareil n'applique pas cette liste.",
   "statistics_by_device": "Temps par appareil",
   "statistics_by_device_empty": "Aucune utilisation signalée pour l'instant. Les appareils envoient leur utilisation lors de la synchronisation.",
   "statistics_total": "Total",
@@ -533,5 +533,10 @@
   "schedule_other_device": "Modifiez-le depuis {device}.",
   "schedule_this_device": "Cet appareil est…",
   "schedule_location_reuse": "Réutiliser",
-  "schedule_location_use_here": "Utiliser ma position"
+  "schedule_location_use_here": "Utiliser ma position",
+  "dashboard_week_title": "Cette semaine",
+  "dashboard_week_description": "Quand chaque liste commence à bloquer, et sur quel appareil.",
+  "dashboard_week_always": "Toujours active",
+  "dashboard_week_empty": "Pas encore d'horaires. Définissez-les par appareil sur la page Planning.",
+  "dashboard_week_places": "Lieux (téléphone uniquement)"
 }

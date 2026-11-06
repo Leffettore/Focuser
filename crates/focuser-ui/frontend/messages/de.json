@@ -496,8 +496,8 @@
   "schedule_needs_gap_title": "Dieser Zeitplan braucht eine Lücke",
   "schedule_needs_gap_body": "{name} wird während des Zeitplans gesperrt oder hat ein gemeinsames Zeitbudget. Beides braucht eine Lücke in der Woche. Lücke lassen oder beides zuerst ausschalten.",
   "schedule_device_all": "Alle Geräte",
-  "schedule_mode_same": "Wie bei allen Geräten",
-  "schedule_same_body": "Dieses Gerät folgt den Zeiten, die für alle Geräte gelten.",
+  "schedule_mode_same": "Aus",
+  "schedule_same_body": "Dieses Gerät führt diese Liste nicht aus.",
   "statistics_by_device": "Zeit nach Gerät",
   "statistics_by_device_empty": "Noch keine Nutzung gemeldet. Geräte senden ihre Nutzung beim Synchronisieren.",
   "statistics_total": "Gesamt",
@@ -525,5 +525,10 @@
   "schedule_other_device": "Ändere dies auf {device}.",
   "schedule_this_device": "Dieses Gerät ist …",
   "schedule_location_reuse": "Übernehmen",
-  "schedule_location_use_here": "Meinen Standort nutzen"
+  "schedule_location_use_here": "Meinen Standort nutzen",
+  "dashboard_week_title": "Diese Woche",
+  "dashboard_week_description": "Wann jede Liste zu blockieren beginnt und auf welchem Gerät.",
+  "dashboard_week_always": "Immer aktiv",
+  "dashboard_week_empty": "Noch keine Zeiten. Lege sie pro Gerät auf der Seite Zeitplan fest.",
+  "dashboard_week_places": "Orte (nur Telefon)"
 }
