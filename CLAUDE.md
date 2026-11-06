@@ -51,6 +51,7 @@ Built in Rust for maximum performance and safety. Targets Windows, macOS, and Li
 ```bash
 cargo build                          # Build all crates
 cargo run -p focuser-cli             # Run CLI
+cargo ui-release                     # Desktop app with the frontend embedded (after `npm run build` in focuser-ui/frontend). Plain `cargo build -p focuser-ui` shows "Could not connect to localhost"
 cargo test --workspace               # Run all tests
 cargo clippy --workspace             # Lint
 ```

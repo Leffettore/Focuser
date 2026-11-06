@@ -1,0 +1,4 @@
+[alias]
+# A plain `cargo build -p focuser-ui` leaves the window pointing at the dev
+# server (localhost:1420). This embeds the frontend; run `npm run build` first.
+ui-release = "build --release -p focuser-ui --features tauri/custom-protocol"
