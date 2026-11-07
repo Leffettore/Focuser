@@ -170,7 +170,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          REPO="aadeshrao123/Focuser"
+          REPO="${GITHUB_REPOSITORY}"
           BASE="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}"
 
           # Read signatures
