@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use clap::Parser;
-use focuser_app::{AppContext, Command, CommandResult, execute};
+use focuser_app::{AppContext, Command, CommandResult, execute, execute_as};
 use focuser_core::{BlockEngine, Database};
 use tracing::{Level, error, info, warn};
 
@@ -187,6 +187,7 @@ fn handle(
 
     // Headers — we only care about Content-Length.
     let mut content_length = 0usize;
+    let mut device = None;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 {
@@ -200,6 +201,10 @@ fn handle(
         let lower = line.to_ascii_lowercase();
         if let Some(v) = lower.strip_prefix("content-length:") {
             content_length = v.trim().parse().unwrap_or(0);
+        }
+        // The phone UI names itself, so a lock follows its hours, not the shared ones.
+        if lower.starts_with("x-focuser-device:") {
+            device = line.split_once(':').map(|(_, v)| v.trim().to_string());
         }
     }
 
@@ -218,7 +223,7 @@ fn handle(
             let mut body = vec![0u8; content_length];
             reader.read_exact(&mut body)?;
 
-            let (status, payload) = run_command(ctx, &body);
+            let (status, payload) = run_command(ctx, device.as_deref(), &body);
             respond(&mut stream, status, &payload, Some("application/json"))
         }
 
@@ -251,7 +256,7 @@ fn handle(
 ///
 /// Errors come back as `{ "code": ..., "message": ... }` with a non-2xx status,
 /// so the frontend can branch on `code` without parsing prose.
-fn run_command(ctx: &AppContext, body: &[u8]) -> (u16, String) {
+fn run_command(ctx: &AppContext, device: Option<&str>, body: &[u8]) -> (u16, String) {
     let cmd: Command = match serde_json::from_slice(body) {
         Ok(c) => c,
         Err(e) => {
@@ -270,7 +275,7 @@ fn run_command(ctx: &AppContext, body: &[u8]) -> (u16, String) {
         let _ = engine.refresh();
     }
 
-    match execute(ctx, cmd) {
+    match execute_as(ctx, device, cmd) {
         Ok(result) => (
             200,
             serde_json::to_string(&result).unwrap_or_else(|e| {
@@ -313,7 +318,7 @@ fn respond(
         "HTTP/1.1 {status} {reason}\r\n\
          Access-Control-Allow-Origin: {DEV_ORIGIN}\r\n\
          Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
-         Access-Control-Allow-Headers: Content-Type\r\n\
+         Access-Control-Allow-Headers: Content-Type, X-Focuser-Device\r\n\
          Content-Length: {len}\r\n",
         len = body.len(),
     );

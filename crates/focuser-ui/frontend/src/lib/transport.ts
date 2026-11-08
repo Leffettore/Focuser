@@ -14,6 +14,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { CommandErrorPayload } from "@/bindings";
+import { isAndroidApp } from "./native";
 
 const DEVSERVER_URL = import.meta.env.VITE_DEVSERVER_URL ?? "http://localhost:17550";
 
@@ -107,7 +108,11 @@ async function sendViaHttp<TResult>(command: unknown): Promise<TResult> {
   try {
     response = await fetch(`${DEVSERVER_URL}/command`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // The server checks a lock against this device's hours.
+        ...(isAndroidApp() ? { "X-Focuser-Device": "phone" } : {}),
+      },
       body: JSON.stringify(command),
     });
   } catch {

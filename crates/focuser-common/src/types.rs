@@ -136,6 +136,18 @@ impl BlockList {
         })
     }
 
+    /// The list as one device runs it: its own hours replace the shared ones.
+    pub fn for_device(mut self, device: &str) -> Self {
+        if let Some(own) = self.device_schedules.get(device) {
+            // "Always" is stored as a disabled schedule; the engine reads no schedule as always.
+            self.schedule = own.enabled.then(|| own.clone());
+        } else if self.only_devices {
+            // No all-devices hours and none of its own: this device does not run the list.
+            self.enabled = false;
+        }
+        self
+    }
+
     pub fn scheduled_lock_state(&self) -> ScheduledLockState {
         self.scheduled_lock_state_at(chrono::Local::now())
     }

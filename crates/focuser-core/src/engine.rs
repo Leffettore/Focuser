@@ -16,6 +16,10 @@ pub struct BlockEngine {
     cached_lists: Vec<BlockList>,
     /// The list of a focus session that is locked, and its rounds to go.
     locked_session: Option<(EntityId, u32)>,
+    /// The device a command comes from, when it is not this one (the phone UI
+    /// reaches this engine through the server): its hours decide whether a
+    /// scheduled lock holds.
+    acting_device: Option<String>,
 }
 
 impl BlockEngine {
@@ -28,6 +32,7 @@ impl BlockEngine {
             db,
             cached_lists,
             locked_session,
+            acting_device: None,
         })
     }
 
@@ -37,6 +42,10 @@ impl BlockEngine {
         self.locked_session = locked_session(&self.db)?;
         debug!(count = self.cached_lists.len(), "Refreshed block lists");
         Ok(())
+    }
+
+    pub fn set_acting_device(&mut self, device: Option<String>) {
+        self.acting_device = device;
     }
 
     /// The list of a focus session that is locked, and its rounds to go (#47).
@@ -385,7 +394,10 @@ impl BlockEngine {
                 .cached_lists
                 .iter()
                 .find(|l| l.id == id)
-                .is_some_and(|l| l.is_modification_protected())
+                .is_some_and(|l| match &self.acting_device {
+                    Some(device) => l.clone().for_device(device).is_modification_protected(),
+                    None => l.is_modification_protected(),
+                })
     }
 
     pub fn active_protection_info(&self) -> Vec<ProtectionInfo> {

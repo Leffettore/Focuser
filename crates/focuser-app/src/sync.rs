@@ -19,21 +19,6 @@ pub const SETTING_TOKEN: &str = "sync_token";
 /// Hash of the last document applied in full, so an unchanged file is a no-op.
 const SETTING_LAST_HASH: &str = "sync_last_hash";
 
-/// The list as this device runs it: its own hours replace the shared ones.
-fn for_device(
-    mut list: focuser_common::types::BlockList,
-    device: &str,
-) -> focuser_common::types::BlockList {
-    if let Some(own) = list.device_schedules.get(device) {
-        // "Always" is stored as a disabled schedule; the engine reads no schedule as always.
-        list.schedule = own.enabled.then(|| own.clone());
-    } else if list.only_devices {
-        // No all-devices hours and none of its own: this device does not run the list.
-        list.enabled = false;
-    }
-    list
-}
-
 /// GET the document. Runs without the engine lock: the server may be slow or
 /// down, and the blocking loop must not wait for it.
 pub fn fetch(url: &str, token: Option<&str>) -> Result<String, String> {
@@ -120,7 +105,7 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
     for incoming in document.block_lists {
         let existing = engine.block_lists().iter().find(|l| l.id == incoming.id);
         let Some(existing) = existing else {
-            let mut list = for_device(incoming, &device);
+            let mut list = incoming.for_device(&device);
             list.schedule_unlocked_until = None;
             list.applications.clear();
             engine.db().create_block_list(&list)?;
@@ -133,7 +118,7 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
             continue;
         }
         // Device-local state the server knows nothing about.
-        let mut list = for_device(incoming, &device);
+        let mut list = incoming.for_device(&device);
         list.lock = existing.lock.clone();
         list.protection = existing.protection.clone();
         list.schedule_unlocked_until = existing.schedule_unlocked_until;

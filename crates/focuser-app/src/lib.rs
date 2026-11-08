@@ -20,4 +20,4 @@ pub mod sync;
 pub use command::{Command, CommandResult};
 pub use context::{AppContext, NoopSync, PomodoroEvent, SystemSync};
 pub use error::{CommandError, CommandErrorPayload, CommandOutcome};
-pub use execute::execute;
+pub use execute::{execute, execute_as};

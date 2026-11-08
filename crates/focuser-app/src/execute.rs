@@ -20,6 +20,16 @@ use crate::error::{CommandError, CommandOutcome};
 
 /// Run one command against the shared context.
 pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> {
+    execute_as(ctx, None, cmd)
+}
+
+/// [`execute`] for a command sent by another device (the phone, through the
+/// server): a scheduled lock holds only during that device's own hours.
+pub fn execute_as(
+    ctx: &AppContext,
+    device: Option<&str>,
+    cmd: Command,
+) -> CommandOutcome<CommandResult> {
     // Before the lock: reading icons is slow and never touches the engine.
     if let Command::GetAppIcons { targets } = cmd {
         return Ok(CommandResult::AppIcons(app_icons(targets)));
@@ -29,6 +39,7 @@ pub fn execute(ctx: &AppContext, cmd: Command) -> CommandOutcome<CommandResult> 
         .engine
         .lock()
         .map_err(|_| CommandError::Internal("engine lock poisoned".into()))?;
+    engine.set_acting_device(device.map(str::to_string));
 
     match cmd {
         Command::ListBlockLists => Ok(CommandResult::BlockLists(engine.block_lists().to_vec())),
@@ -1209,7 +1220,7 @@ fn clear_across_lists(
     let mut cleared = 0u32;
 
     for mut list in engine.db().list_block_lists()? {
-        if list.is_modification_protected() || engine.is_block_list_protected(list.id) {
+        if engine.is_block_list_protected(list.id) {
             continue;
         }
         let n = clear(&mut list);
@@ -2767,6 +2778,45 @@ mod tests {
         )
         .unwrap();
         assert!(!ctx.engine.lock().unwrap().is_block_list_protected(list.id));
+    }
+
+    #[test]
+    fn a_scheduled_lock_follows_the_hours_of_the_device_editing() {
+        use chrono::Datelike;
+        let ctx = ctx();
+        let list = scheduled_list(&ctx, None);
+        // The phone's own hours are on another day, so today it is free.
+        let other_day = chrono::Local::now().weekday().succ();
+        let mut stored = {
+            let mut engine = ctx.engine.lock().unwrap();
+            let mut stored = engine.db().get_block_list(list.id).unwrap();
+            stored.device_schedules.insert(
+                "phone".into(),
+                Schedule {
+                    id: focuser_common::types::new_id(),
+                    name: "phone".into(),
+                    enabled: true,
+                    time_slots: vec![TimeSlot::new(
+                        other_day,
+                        chrono::NaiveTime::MIN,
+                        chrono::NaiveTime::MIN,
+                    )],
+                },
+            );
+            engine.db().update_block_list(&stored).unwrap();
+            engine.refresh().unwrap();
+            stored
+        };
+        stored.name = "Renamed".into();
+        let update = || Command::UpdateBlockList {
+            list: Box::new(stored.clone()),
+        };
+
+        assert!(matches!(
+            execute(&ctx, update()),
+            Err(CommandError::Protected)
+        ));
+        assert!(execute_as(&ctx, Some("phone"), update()).is_ok());
     }
 
     #[test]
