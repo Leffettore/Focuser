@@ -437,15 +437,17 @@ function WeekSummary({
                   {on > 0 ? `${on}h` : "off"}
                 </span>
               </div>
-              <p
+              {/* One range per line: a busy day must read in full, not be cut off. */}
+              <div
                 className={cn(
-                  "mt-1 truncate text-xs",
+                  "mt-1 text-xs tabular-nums",
                   on > 0 ? "text-muted-foreground" : "text-faint-foreground",
                 )}
-                title={text}
               >
-                {text}
-              </p>
+                {text.split(", ").map((range) => (
+                  <p key={range}>{range}</p>
+                ))}
+              </div>
             </div>
           );
         })}
