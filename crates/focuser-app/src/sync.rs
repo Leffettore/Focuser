@@ -118,6 +118,13 @@ pub(crate) fn merge(engine: &mut BlockEngine, json: &str) -> CommandOutcome<Stri
             continue;
         }
         // Device-local state the server knows nothing about.
+        let mut incoming = incoming;
+        // This device's own hours are set here and never pushed, so the server's copy must not undo them.
+        if let Some(own) = existing.device_schedules.get(&device) {
+            incoming
+                .device_schedules
+                .insert(device.clone(), own.clone());
+        }
         let mut list = incoming.for_device(&device);
         list.lock = existing.lock.clone();
         list.protection = existing.protection.clone();
@@ -240,6 +247,36 @@ mod tests {
         engine.refresh().unwrap();
         // The phone's entry is "always", which reads as no schedule at all.
         assert!(engine.block_lists()[0].schedule.is_none());
+    }
+
+    #[test]
+    fn keeps_this_devices_own_hours_when_the_server_copy_has_none() {
+        use focuser_common::types::Schedule;
+        let mut engine = engine();
+        engine.db().set_setting("device_name", "laptop").unwrap();
+        let mut list = BlockList::new("Focus");
+        merge(&mut engine, &doc(std::slice::from_ref(&list))).unwrap();
+        engine.refresh().unwrap();
+        let mut local = engine.block_lists()[0].clone();
+        local.device_schedules.insert(
+            "laptop".into(),
+            Schedule {
+                id: focuser_common::types::new_id(),
+                name: "own".into(),
+                time_slots: Vec::new(),
+                enabled: true,
+            },
+        );
+        engine.db().update_block_list(&local).unwrap();
+        list.name = "Renamed".into();
+        merge(&mut engine, &doc(&[list])).unwrap();
+        engine.refresh().unwrap();
+        assert_eq!(engine.block_lists()[0].name, "Renamed");
+        assert!(
+            engine.block_lists()[0]
+                .device_schedules
+                .contains_key("laptop")
+        );
     }
 
     #[test]
