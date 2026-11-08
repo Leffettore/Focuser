@@ -74,7 +74,7 @@ export function AppLayout() {
             onClick={() => setHidden(false)}
             aria-label={m.nav_show()}
             title={m.nav_show()}
-            className="-translate-y-1/2 glass fixed top-1/2 left-0 z-30 rounded-r-lg border border-border/60 border-l-0 p-2 text-muted-foreground md:hidden"
+            className="glass fixed top-2 right-2 z-30 rounded-lg border border-border/60 p-2 text-muted-foreground md:hidden"
           >
             <PanelLeftOpen aria-hidden className="size-6" />
           </button>

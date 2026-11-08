@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { BlockList } from "@/bindings";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { assignColors } from "@/lib/chart-colors";
 import { DAYS, formatSlot, runsForDay, SLOTS, slotsToCells } from "@/lib/schedule";
 import { m } from "@/paraglide/messages.js";
 
@@ -26,6 +27,9 @@ export function WeekCalendar({ lists }: { lists: BlockList[] }) {
   const timed = entries
     .filter((e) => e.hours.enabled)
     .map((e) => ({ ...e, cells: slotsToCells(e.hours.time_slots) }));
+  // A side line in the device's colour, so blocks of different devices tell apart.
+  const devices = [...new Set(entries.map((e) => e.device))].sort();
+  const colors = assignColors(devices);
   const withPlaces = on.filter((l) => (l.locations ?? []).length > 0);
 
   if (entries.length === 0 && withPlaces.length === 0) {
@@ -47,7 +51,8 @@ export function WeekCalendar({ lists }: { lists: BlockList[] }) {
                   <Link
                     key={`${c.list.id}-${c.device}-${c.start}`}
                     to={editor(c.list, c.device)}
-                    className="rounded-md bg-primary/15 px-2 py-1 text-xs ring-1 ring-primary/20 ring-inset hover:bg-primary/25"
+                    style={{ borderLeftColor: colors.get(c.device) }}
+                    className="rounded-md border-l-[3px] bg-primary/15 px-2 py-1 text-xs ring-1 ring-primary/20 ring-inset hover:bg-primary/25"
                   >
                     <span className="block font-medium text-primary tabular-nums">
                       {formatSlot(c.start)}–{formatSlot(c.end % SLOTS)}
@@ -62,6 +67,21 @@ export function WeekCalendar({ lists }: { lists: BlockList[] }) {
           );
         })}
       </div>
+
+      {devices.length > 1 && (
+        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
+          {devices.map((device) => (
+            <li key={device} className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="h-3.5 w-[3px] rounded-full"
+                style={{ backgroundColor: colors.get(device) }}
+              />
+              {device}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {always.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
