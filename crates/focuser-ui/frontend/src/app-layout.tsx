@@ -6,8 +6,11 @@ import {
   Hourglass,
   LayoutDashboard,
   ListChecks,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
 } from "lucide-react";
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { BlockingHealthBanner } from "@/components/blocking-health-banner";
 import { TitleBar } from "@/components/title-bar";
@@ -33,17 +36,49 @@ const NAV = [
   { to: "/settings", label: m.nav_settings, icon: Settings },
 ] as const;
 
+const NAV_HIDDEN_KEY = "focuser.navHidden";
+
+/** Whether the narrow-screen menu is tucked away; remembered per device. */
+function useNavHidden() {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(NAV_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const set = (value: boolean) => {
+    setHidden(value);
+    try {
+      localStorage.setItem(NAV_HIDDEN_KEY, value ? "1" : "0");
+    } catch {}
+  };
+  return [hidden, set] as const;
+}
+
 export function AppLayout() {
   // Wraps every route, so this is the one place the saved language reaches the
   // whole app rather than only the page that happens to read it.
   useApplySavedLanguage();
+  const [hidden, setHidden] = useNavHidden();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-deep">
       <TitleBar />
 
-      <div className="flex min-h-0 flex-1 flex-col-reverse md:flex-row">
-        <Sidebar />
+      <div className="flex min-h-0 flex-1 flex-row">
+        <Sidebar hidden={hidden} onHide={() => setHidden(true)} />
+        {hidden && (
+          <button
+            type="button"
+            onClick={() => setHidden(false)}
+            aria-label={m.nav_show()}
+            title={m.nav_show()}
+            className="-translate-y-1/2 glass fixed top-1/2 left-0 z-30 rounded-r-lg border border-border/60 border-l-0 p-2 text-muted-foreground md:hidden"
+          >
+            <PanelLeftOpen aria-hidden className="size-6" />
+          </button>
+        )}
         <main className="app-canvas min-w-0 flex-1 overflow-y-auto bg-background">
           <BlockingHealthBanner />
           <Outlet />
@@ -53,15 +88,29 @@ export function AppLayout() {
   );
 }
 
-function Sidebar() {
+function Sidebar({ hidden, onHide }: { hidden: boolean; onHide: () => void }) {
   return (
+    // Narrow screens get an icon rail down the left edge that can be tucked away.
     <nav
       aria-label={m.nav_landmark()}
-      className="glass flex shrink-0 border-border/60 border-t p-1 md:w-56 md:flex-col md:border-t-0 md:border-r md:p-3"
+      className={cn(
+        "glass flex shrink-0 flex-col overflow-y-auto border-border/60 border-r p-1.5 md:w-56 md:p-3",
+        hidden && "hidden md:flex",
+      )}
     >
       <Brand />
 
-      <div className="flex flex-1 justify-between gap-0.5 md:flex-none md:flex-col md:justify-start">
+      <button
+        type="button"
+        onClick={onHide}
+        aria-label={m.nav_hide()}
+        title={m.nav_hide()}
+        className="mb-1 flex items-center justify-center rounded-lg p-3 text-muted-foreground hover:bg-foreground/[0.04] md:hidden"
+      >
+        <PanelLeftClose aria-hidden className="size-6" />
+      </button>
+
+      <div className="flex flex-1 flex-col gap-0.5 md:flex-none">
         {NAV.map(({ to, label, icon: Icon, ...rest }) => (
           <NavLink
             key={to}
@@ -69,7 +118,7 @@ function Sidebar() {
             end={"end" in rest ? rest.end : undefined}
             className={({ isActive }) =>
               cn(
-                "group relative flex items-center justify-center gap-3 rounded-lg p-2.5 font-medium text-sm md:justify-start md:px-3 md:py-2",
+                "group relative flex items-center justify-center gap-3 rounded-lg p-3 font-medium text-sm md:justify-start md:px-3 md:py-2",
                 "transition-colors duration-150",
                 isActive
                   ? "bg-primary/12 text-foreground"
@@ -86,7 +135,7 @@ function Sidebar() {
                 <span
                   aria-hidden
                   className={cn(
-                    "-translate-y-1/2 absolute top-1/2 left-0 hidden w-[3px] md:block rounded-r-full bg-primary",
+                    "-translate-y-1/2 absolute top-1/2 left-0 hidden w-[3px] rounded-r-full md:block bg-primary",
                     "transition-all duration-200",
                     isActive ? "h-5 opacity-100" : "h-0 opacity-0",
                   )}
@@ -94,7 +143,7 @@ function Sidebar() {
                 <Icon
                   aria-hidden
                   className={cn(
-                    "size-4 shrink-0 transition-colors",
+                    "size-6 shrink-0 transition-colors md:size-4",
                     isActive ? "text-primary" : "text-faint-foreground group-hover:text-foreground",
                   )}
                 />

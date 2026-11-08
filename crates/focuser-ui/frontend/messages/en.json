@@ -9,6 +9,8 @@
   "nav_statistics": "Statistics",
   "nav_settings": "Settings",
   "nav_landmark": "Main",
+  "nav_hide": "Hide menu",
+  "nav_show": "Show menu",
   "session_focus": "Focus",
   "session_break": "Break",
   "session_paused": "Paused",

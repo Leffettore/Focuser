@@ -9,6 +9,8 @@
   "nav_statistics": "统计",
   "nav_settings": "设置",
   "nav_landmark": "主导航",
+  "nav_hide": "隐藏菜单",
+  "nav_show": "显示菜单",
   "session_focus": "专注",
   "session_break": "休息",
   "session_paused": "已暂停",

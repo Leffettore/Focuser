@@ -9,6 +9,8 @@
   "nav_statistics": "統計",
   "nav_settings": "設定",
   "nav_landmark": "メイン",
+  "nav_hide": "メニューを隠す",
+  "nav_show": "メニューを表示",
   "session_focus": "集中",
   "session_break": "休憩",
   "session_paused": "一時停止中",

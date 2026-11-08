@@ -9,6 +9,8 @@
   "nav_statistics": "통계",
   "nav_settings": "설정",
   "nav_landmark": "주요 메뉴",
+  "nav_hide": "메뉴 숨기기",
+  "nav_show": "메뉴 표시",
   "session_focus": "집중",
   "session_break": "휴식",
   "session_paused": "일시정지됨",

@@ -9,6 +9,8 @@
   "nav_statistics": "Статистика",
   "nav_settings": "Настройки",
   "nav_landmark": "Основное",
+  "nav_hide": "Скрыть меню",
+  "nav_show": "Показать меню",
   "session_focus": "Фокус",
   "session_break": "Перерыв",
   "session_paused": "На паузе",

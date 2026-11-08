@@ -227,12 +227,15 @@ export function Schedule() {
                 onSave={commit}
               />
 
-              <LocationsPanel
-                listId={list.id}
-                locations={list.locations ?? []}
-                others={all.filter((l) => l.id !== list.id).flatMap((l) => l.locations ?? [])}
-                disabled={false}
-              />
+              {/* Places come from the phone's GPS; no other device can use them. */}
+              {device === "phone" && (
+                <LocationsPanel
+                  listId={list.id}
+                  locations={list.locations ?? []}
+                  others={all.filter((l) => l.id !== list.id).flatMap((l) => l.locations ?? [])}
+                  disabled={false}
+                />
+              )}
 
               <Card padding="none" elevation="raised" className="edge-light overflow-hidden">
                 <ListHoursOptions list={list} page="schedule" />
