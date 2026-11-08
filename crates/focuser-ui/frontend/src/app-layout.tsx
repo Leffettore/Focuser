@@ -68,6 +68,16 @@ export function AppLayout() {
 
       <div className="flex min-h-0 flex-1 flex-row">
         <Sidebar hidden={hidden} onHide={() => setHidden(true)} />
+        {!hidden && (
+          // Tapping the page beside the open menu closes it.
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            onClick={() => setHidden(true)}
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          />
+        )}
         {hidden && (
           <button
             type="button"
@@ -94,7 +104,9 @@ function Sidebar({ hidden, onHide }: { hidden: boolean; onHide: () => void }) {
     <nav
       aria-label={m.nav_landmark()}
       className={cn(
-        "glass flex shrink-0 flex-col overflow-y-auto border-border/60 border-r p-1.5 md:w-56 md:p-3",
+        // Over the page on narrow screens, so opening it does not squeeze the content.
+        "glass fixed inset-y-0 left-0 z-40 flex flex-col overflow-y-auto border-border/60 border-r bg-surface p-1.5 shadow-xl",
+        "md:static md:z-auto md:w-56 md:shrink-0 md:bg-transparent md:p-3 md:shadow-none",
         hidden && "hidden md:flex",
       )}
     >
