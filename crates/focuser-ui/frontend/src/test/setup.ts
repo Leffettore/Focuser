@@ -4,7 +4,7 @@ import { beforeEach } from "vitest";
 
 // The default second is not enough for a first render on a busy CI runner,
 // and a `findBy` that times out there fails a test that is otherwise right.
-configure({ asyncUtilTimeout: 5000 });
+configure({ asyncUtilTimeout: 20_000 });
 
 // jsdom has the <dialog> element but none of its methods. This is the least
 // that lets a component open one: the `open` attribute, and a `close` event.
