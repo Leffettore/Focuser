@@ -188,6 +188,16 @@ describe("wildcard exceptions", () => {
   });
 });
 
+describe("address wildcard exceptions", () => {
+  it("frees every video opened from a playlist, and nothing else", () => {
+    const r = rules({ blocked_domains: ["youtube.com"], allowed_wildcards: ["youtube.com/*list=WL*"] });
+    const open = (url: string) => match(r, new URL(url).hostname, url);
+    expect(open("https://www.youtube.com/watch?v=abc123xyz&list=WL&index=2")).toBeNull();
+    expect(open("https://www.youtube.com/playlist?list=WL")).toBeNull();
+    expect(open("https://www.youtube.com/watch?v=abc123xyz")).not.toBeNull();
+  });
+});
+
 describe("page exceptions", () => {
   // #21: allowing one page used to allow the whole site, because only the
   // host of the address survived.

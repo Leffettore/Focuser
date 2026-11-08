@@ -204,9 +204,27 @@ function onPage(allowed: AllowedPage, hostname: string, url: string): boolean {
   return next === undefined || "/?&".includes(next);
 }
 
+/**
+ * A wildcard with a `/` in it is aimed at the address, not the host:
+ * `youtube.com/*list=WL*` frees every video opened from that playlist.
+ */
+function matchesAddress(pattern: string, hostname: string, url: string): boolean {
+  if (!pattern.includes("/")) return false;
+  try {
+    const { pathname, search } = new URL(url);
+    return matchWildcard(
+      pattern.trim().toLowerCase().replace(/^https?:\/\//, ""),
+      canonicalHost(hostname) + (pathname + search).toLowerCase(),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function isAllowed(rules: CompiledRules, hostname: string, url = ""): boolean {
   if (setCovers(rules.allowed, hostname)) return true;
   if (rules.allowedWildcards.some((pattern) => matchHostWildcard(pattern, hostname))) return true;
+  if (rules.allowedWildcards.some((pattern) => matchesAddress(pattern, hostname, url))) return true;
   return rules.allowedPages.some((page) => onPage(page, hostname, url));
 }
 

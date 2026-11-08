@@ -24,6 +24,7 @@ import {
   type CompiledRules,
   compile,
   EMPTY_RULES,
+  isAllowed,
   isExtensionsPage,
   isInternalUrl,
   match,
@@ -210,6 +211,12 @@ export default defineBackground(() => {
     // for the count, and a URL rewrite in that gap would reload the tab.
     showingBlock.add(tabId);
 
+    // After the mark, for the same reason: the channel lookup is a network call.
+    if (allowsChannels() && (await channelAllowed(url))) {
+      showingBlock.delete(tabId);
+      return;
+    }
+
     const context = await buildContext(hit, hostname);
     try {
       await browser.scripting.executeScript({
@@ -241,6 +248,16 @@ export default defineBackground(() => {
     if (!video || !namesChannel(rules)) return null;
     const channel = await channelOf(video);
     return channel ? match(rules, new URL(channel).hostname, channel) : null;
+  }
+
+  const allowsChannels = () => rules.allowedPages.some((p) => p.page.startsWith("/@"));
+
+  /** A video from a channel that is an allowed page (`youtube.com/@name`). */
+  async function channelAllowed(url: string): Promise<boolean> {
+    const video = youtubeVideoId(url);
+    if (!video) return false;
+    const channel = await channelOf(video);
+    return channel ? isAllowed(rules, new URL(channel).hostname, channel) : false;
   }
 
   async function enforceOnOpenTabs() {

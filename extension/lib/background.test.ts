@@ -377,3 +377,22 @@ describe("time on a page under a shared allowance", () => {
     expect(ticks().filter((t) => t.shared_only)).toEqual([]);
   });
 });
+
+describe("videos from an allowed channel", () => {
+  const rules: RuleSet = { ...RULES, blocked_domains: ["youtube.com"], allowed_url_paths: ["youtube.com/@GoodChannel"] };
+  const visit = (url: string) =>
+    fakeBrowser.webNavigation.onCommitted.trigger({ tabId: 7, frameId: 0, url } as never);
+
+  it("are not blocked, and other channels' videos are", async () => {
+    await start(rules, { channel: "https://www.youtube.com/@GoodChannel" });
+    await visit("https://www.youtube.com/watch?v=allow000001");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(blockPages()).toHaveLength(0);
+  });
+
+  it("other channels still get the block page", async () => {
+    await start(rules, { channel: "https://www.youtube.com/@Other" });
+    await visit("https://www.youtube.com/watch?v=allow000002");
+    await vi.waitFor(() => expect(blockPages()).toHaveLength(1));
+  });
+});
