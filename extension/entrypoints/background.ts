@@ -406,10 +406,19 @@ export default defineBackground(() => {
         }
         case "check-url": {
           const hit = match(rules, message.hostname, message.url);
-          if (hit && noteReport(message.hostname)) {
-            void reportBlocked(message.hostname, trackingKey(hit));
+          const answer = (blocked: boolean) => {
+            if (blocked && hit && noteReport(message.hostname)) {
+              void reportBlocked(message.hostname, trackingKey(hit));
+            }
+            sendResponse({ type: "check-url", blocked });
+          };
+          // The early script keeps the page hidden on "blocked", so a video from
+          // an allowed channel has to be answered here as well as in blockTab.
+          if (hit && allowsChannels()) {
+            void channelAllowed(message.url).then((allowed) => answer(!allowed));
+            return true;
           }
-          sendResponse({ type: "check-url", blocked: hit !== null });
+          answer(hit !== null);
           return false;
         }
         case "status": {

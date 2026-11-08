@@ -396,3 +396,21 @@ describe("videos from an allowed channel", () => {
     await vi.waitFor(() => expect(blockPages()).toHaveLength(1));
   });
 });
+
+describe("the early script's answer for an allowed channel's video", () => {
+  it("is not blocked, so the page is revealed", async () => {
+    await start(
+      { ...RULES, blocked_domains: ["youtube.com"], allowed_url_paths: ["youtube.com/@GoodChannel"] },
+      { channel: "https://www.youtube.com/@GoodChannel" },
+    );
+    const asked = (url: string) =>
+      new Promise<{ blocked: boolean }>((resolve) => {
+        void fakeBrowser.runtime.onMessage.trigger(
+          { type: "check-url", hostname: "www.youtube.com", url },
+          {},
+          resolve as never,
+        );
+      });
+    expect((await asked("https://www.youtube.com/watch?v=reveal00001")).blocked).toBe(false);
+  });
+});
