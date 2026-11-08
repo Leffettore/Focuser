@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BlockList, Command, CommandResult, ScheduledLockState } from "@/bindings";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { cellKey, cellsToSlots, DAYS, HOURS } from "@/lib/schedule";
+import { cellKey, cellsToSlots, DAYS, SLOTS } from "@/lib/schedule";
 import { CommandError } from "@/lib/transport";
 import { Allowances } from "./allowances";
 import { BlockLists } from "./block-lists";
@@ -66,7 +66,9 @@ const list = (id: string, name: string): BlockList => ({
 });
 
 const everyHour = () =>
-  cellsToSlots(new Set(DAYS.flatMap((day) => HOURS.map((hour) => cellKey(day, hour)))));
+  cellsToSlots(
+    new Set(DAYS.flatMap((day) => Array.from({ length: SLOTS }, (_, q) => cellKey(day, q)))),
+  );
 
 let lists: BlockList[];
 /** The list every test is about. */

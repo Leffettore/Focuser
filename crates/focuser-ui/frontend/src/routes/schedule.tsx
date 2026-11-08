@@ -37,18 +37,17 @@ import {
   cellsToSlots,
   DAYS,
   describeDay,
-  HOURS,
   hoursOn,
+  PER_HOUR,
   PRESETS,
   slotsToCells,
+  WEEK_SLOTS,
 } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { m } from "@/paraglide/messages.js";
 
 const sameCells = (a: Set<CellKey>, b: Set<CellKey>) =>
   a.size === b.size && [...a].every((k) => b.has(k));
-
-const WEEK_HOURS = DAYS.length * HOURS.length;
 
 /** Presets are defined in the lib; the icon is presentation, so it lives here. */
 const PRESET_ICONS: Record<string, ReactNode> = {
@@ -115,8 +114,8 @@ export function Schedule() {
   const running =
     list?.enabled === true &&
     savedMode === "scheduled" &&
-    saved.size < WEEK_HOURS &&
-    saved.has(cellKey(today, now.getHours()));
+    saved.size < WEEK_SLOTS &&
+    saved.has(cellKey(today, now.getHours() * PER_HOUR + Math.floor(now.getMinutes() / 15)));
   const locked = running;
   const dirty =
     !locked &&
@@ -129,7 +128,7 @@ export function Schedule() {
   // list that has either cannot be saved as on all week. The command core
   // refuses that too; this says it in the reader's language, before the call.
   const followsHours = list?.scheduled_protection != null || list?.shared_allowance != null;
-  const leavesGap = mode === "scheduled" && draft.size > 0 && draft.size < WEEK_HOURS;
+  const leavesGap = mode === "scheduled" && draft.size > 0 && draft.size < WEEK_SLOTS;
 
   function commit() {
     if (!list) return;
@@ -368,8 +367,8 @@ function WeekSummary({
   saving: boolean;
   onSave: () => void;
 }) {
-  const total = cells ? cells.size : WEEK_HOURS;
-  const share = Math.round((total / WEEK_HOURS) * 100);
+  const total = cells ? cells.size : WEEK_SLOTS;
+  const share = Math.round((total / WEEK_SLOTS) * 100);
 
   return (
     <Card padding="none" elevation="raised" className="edge-light overflow-hidden">
@@ -381,9 +380,9 @@ function WeekSummary({
           </span>
           <p className="mt-1.5 flex items-baseline gap-2.5">
             <span className="font-semibold text-3xl text-foreground tabular-nums">
-              {formatDuration(total * 3600)}
+              {formatDuration((total / PER_HOUR) * 3600)}
             </span>
-            <span className="text-faint-foreground text-xs">of {WEEK_HOURS} hours</span>
+            <span className="text-faint-foreground text-xs">of {WEEK_SLOTS / PER_HOUR} hours</span>
           </p>
         </div>
 
@@ -416,7 +415,7 @@ function WeekSummary({
           above it rather than as a list running the other way. */}
       <div className="grid grid-cols-2 gap-px border-border border-t bg-border sm:grid-cols-4 lg:grid-cols-7">
         {DAYS.map((day) => {
-          const on = cells ? hoursOn(cells, day) : HOURS.length;
+          const on = cells ? hoursOn(cells, day) : 24;
           const text = cells ? describeDay(cells, day) : m.schedule_all_day();
           return (
             <div key={day} className="bg-surface px-4 py-3">

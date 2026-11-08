@@ -5,8 +5,11 @@ import {
   DAYS,
   type Day,
   formatHour,
+  formatSlot,
   HOURS,
   hoursOn,
+  PER_HOUR,
+  SLOTS,
   toggleDay,
   toggleHour,
 } from "@/lib/schedule";
@@ -14,10 +17,10 @@ import { cn } from "@/lib/utils";
 import { m } from "@/paraglide/messages.js";
 
 /**
- * 7×24 hour grid with click-and-drag painting.
+ * 7×96 grid of quarter-hours with click-and-drag painting.
  *
  * Dragging paints one mode for the whole gesture, decided by the first cell:
- * starting on a selected hour erases, starting on an empty one fills. Without
+ * starting on a selected quarter erases, starting on an empty one fills. Without
  * that, a drag across mixed cells just inverts them and feels random.
  *
  * The day and hour headings are buttons too — filling a row or a column is the
@@ -34,6 +37,7 @@ export function ScheduleGrid({
 }) {
   // A ref, not state: pointerenter can fire before React commits, and a stale
   // paint mode would drop cells mid-drag.
+  const quarters = Array.from({ length: SLOTS }, (_, q) => q);
   const paintMode = useRef<"add" | "remove" | null>(null);
 
   // The pointer often leaves the grid before release, so listen on the window.
@@ -93,14 +97,14 @@ export function ScheduleGrid({
           own heading, so the hours showing "12am" came out wide and the ones
           showing a dot came out narrow — 24 supposedly equal hours rendered at
           two different widths. */}
-      <table className="w-full min-w-[60rem] table-fixed select-none border-separate border-spacing-[3px]">
+      <table className="w-full min-w-[100rem] table-fixed select-none border-separate border-spacing-[1px]">
         <caption className="sr-only">{m.grid_aria()}</caption>
         <thead>
           <tr>
             {/* Fixed layout takes every column width from the first row. */}
             <th className="w-20" />
             {HOURS.map((hour) => (
-              <th key={hour} scope="col" className="pb-2">
+              <th key={hour} scope="col" colSpan={PER_HOUR} className="pb-2">
                 <button
                   type="button"
                   disabled={disabled}
@@ -151,12 +155,12 @@ export function ScheduleGrid({
                     </span>
                   </button>
                 </th>
-                {HOURS.map((hour) => (
+                {quarters.map((slot) => (
                   <Cell
-                    key={hour}
+                    key={slot}
                     day={day}
-                    hour={hour}
-                    on={selected.has(cellKey(day, hour))}
+                    slot={slot}
+                    on={selected.has(cellKey(day, slot))}
                     disabled={disabled}
                     onStart={startPaint}
                     onEnter={paintOver}
@@ -171,31 +175,36 @@ export function ScheduleGrid({
   );
 }
 
-// Memoised: a drag fires pointerenter continuously, and re-rendering all 168
+// Memoised: a drag fires pointerenter continuously, and re-rendering all 672
 // cells for a one-cell change is what made painting feel sticky.
 const Cell = memo(function Cell({
   day,
-  hour,
+  slot,
   on,
   disabled,
   onStart,
   onEnter,
 }: {
   day: Day;
-  hour: number;
+  slot: number;
   on: boolean;
   disabled?: boolean;
   onStart: (key: CellKey) => void;
   onEnter: (key: CellKey) => void;
 }) {
-  const key = cellKey(day, hour);
+  const key = cellKey(day, slot);
 
   return (
-    <td className={cn("p-0", hour % 6 === 0 && hour !== 0 && "border-border/70 border-l")}>
+    <td
+      className={cn(
+        "p-0",
+        slot % (PER_HOUR * 6) === 0 && slot !== 0 && "border-border/70 border-l",
+      )}
+    >
       <button
         type="button"
         aria-pressed={on}
-        aria-label={`${day} ${formatHour(hour)}`}
+        aria-label={`${day} ${formatSlot(slot)}`}
         disabled={disabled}
         onPointerDown={(e) => {
           // Keeps the gesture alive when the pointer leaves this cell.
@@ -204,7 +213,7 @@ const Cell = memo(function Cell({
         }}
         onPointerEnter={() => onEnter(key)}
         className={cn(
-          "block h-11 w-full rounded-md transition-colors duration-100",
+          "block h-11 w-full rounded-sm transition-colors duration-100",
           "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
           on
             ? "bg-primary shadow-(--shadow-depth-sm) hover:bg-primary-hover"

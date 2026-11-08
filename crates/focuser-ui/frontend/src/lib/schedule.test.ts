@@ -4,8 +4,8 @@ import {
   cellKey,
   cellsToSlots,
   DAYS,
+  type Day,
   describeDay,
-  HOURS,
   hasEndingHours,
   hoursOn,
   slotsToCells,
@@ -15,22 +15,25 @@ import {
 } from "./schedule";
 
 const cells = (...keys: CellKey[]) => new Set(keys);
+// A whole hour: the grid works in quarters.
+const hr = (day: Day, hour: number): CellKey[] =>
+  [0, 1, 2, 3].map((q) => cellKey(day, hour * 4 + q));
 
 const wholeWeek = () => {
   const all = new Set<CellKey>();
-  for (const day of DAYS) for (const hour of HOURS) all.add(cellKey(day, hour));
+  for (const day of DAYS) for (let q = 0; q < 96; q++) all.add(cellKey(day, q));
   return all;
 };
 
 describe("cellsToSlots", () => {
   it("merges contiguous hours into one slot", () => {
-    const slots = cellsToSlots(cells("Mon-9", "Mon-10", "Mon-11"));
+    const slots = cellsToSlots(cells(...hr("Mon", 9), ...hr("Mon", 10), ...hr("Mon", 11)));
 
     expect(slots).toEqual([{ day: "Mon", start: "09:00:00", end: "12:00:00" }]);
   });
 
   it("splits non-contiguous hours", () => {
-    const slots = cellsToSlots(cells("Mon-9", "Mon-10", "Mon-14"));
+    const slots = cellsToSlots(cells(...hr("Mon", 9), ...hr("Mon", 10), ...hr("Mon", 14)));
 
     expect(slots).toEqual([
       { day: "Mon", start: "09:00:00", end: "11:00:00" },
@@ -39,13 +42,13 @@ describe("cellsToSlots", () => {
   });
 
   it("ends the last hour of the day at midnight", () => {
-    expect(cellsToSlots(cells("Sun-23"))).toEqual([
+    expect(cellsToSlots(cells(...hr("Sun", 23)))).toEqual([
       { day: "Sun", start: "23:00:00", end: "00:00:00" },
     ]);
   });
 
   it("keeps days separate", () => {
-    const slots = cellsToSlots(cells("Mon-9", "Tue-9"));
+    const slots = cellsToSlots(cells(...hr("Mon", 9), ...hr("Tue", 9)));
 
     expect(slots).toHaveLength(2);
     expect(slots.map((s) => s.day)).toEqual(["Mon", "Tue"]);
@@ -56,13 +59,13 @@ describe("slotsToCells", () => {
   it("expands a slot into one cell per hour", () => {
     const set = slotsToCells([{ day: "Mon", start: "09:00:00", end: "12:00:00" }]);
 
-    expect([...set].sort()).toEqual(["Mon-10", "Mon-11", "Mon-9"]);
+    expect(set).toEqual(new Set([...hr("Mon", 9), ...hr("Mon", 10), ...hr("Mon", 11)]));
   });
 
   it("reads a midnight end as the end of the day", () => {
     const set = slotsToCells([{ day: "Sun", start: "22:00:00", end: "00:00:00" }]);
 
-    expect([...set].sort()).toEqual(["Sun-22", "Sun-23"]);
+    expect([...set].sort()).toEqual([...hr("Sun", 22), ...hr("Sun", 23)]);
   });
 
   // A whole day is stored as 00:00–00:00. Reading the end as the *start* of
@@ -71,7 +74,7 @@ describe("slotsToCells", () => {
   it("expands a midnight-to-midnight slot into the whole day", () => {
     const set = slotsToCells([{ day: "Mon", start: "00:00:00", end: "00:00:00" }]);
 
-    expect(set.size).toBe(24);
+    expect(set.size).toBe(96);
     expect(describeDay(set, "Mon")).toBe("All day");
   });
 
@@ -82,13 +85,18 @@ describe("slotsToCells", () => {
 
 describe("describeDay", () => {
   it("reads one run as a range", () => {
-    expect(describeDay(cells("Mon-9", "Mon-10", "Mon-11"), "Mon")).toBe("9am–12pm");
+    expect(describeDay(cells(...hr("Mon", 9), ...hr("Mon", 10), ...hr("Mon", 11)), "Mon")).toBe(
+      "9am–12pm",
+    );
   });
 
   it("lists each run when the day is split", () => {
-    expect(describeDay(cells("Mon-9", "Mon-10", "Mon-14", "Mon-15"), "Mon")).toBe(
-      "9am–11am, 2pm–4pm",
-    );
+    expect(
+      describeDay(
+        cells(...hr("Mon", 9), ...hr("Mon", 10), ...hr("Mon", 14), ...hr("Mon", 15)),
+        "Mon",
+      ),
+    ).toBe("9am–11am, 2pm–4pm");
   });
 
   it("names a full day rather than spelling out midnight to midnight", () => {
@@ -96,7 +104,7 @@ describe("describeDay", () => {
   });
 
   it("ends the last hour of the day at midnight, not 12pm", () => {
-    expect(describeDay(cells("Sun-22", "Sun-23"), "Sun")).toBe("10pm–12am");
+    expect(describeDay(cells(...hr("Sun", 22), ...hr("Sun", 23)), "Sun")).toBe("10pm–12am");
   });
 
   it("says so when nothing is selected", () => {
@@ -106,7 +114,7 @@ describe("describeDay", () => {
 
 describe("toggleDay", () => {
   it("fills a partly-selected row rather than clearing it", () => {
-    expect(hoursOn(toggleDay(cells("Mon-9"), "Mon"), "Mon")).toBe(24);
+    expect(hoursOn(toggleDay(cells(...hr("Mon", 9)), "Mon"), "Mon")).toBe(24);
   });
 
   it("clears a row that is already full", () => {
@@ -114,26 +122,26 @@ describe("toggleDay", () => {
   });
 
   it("leaves the other days alone", () => {
-    const next = toggleDay(cells("Tue-3"), "Mon");
+    const next = toggleDay(cells(...hr("Tue", 3)), "Mon");
 
-    expect(next.has("Tue-3")).toBe(true);
+    expect(hr("Tue", 3).every((k) => next.has(k))).toBe(true);
     expect(hoursOn(next, "Tue")).toBe(1);
   });
 });
 
 describe("toggleHour", () => {
   it("fills the column across every day", () => {
-    const next = toggleHour(cells("Mon-9"), 9);
+    const next = toggleHour(cells(...hr("Mon", 9).slice(0, 1)), 9);
 
-    expect(DAYS.every((day) => next.has(cellKey(day, 9)))).toBe(true);
+    expect(DAYS.every((day) => hr(day, 9).every((k) => next.has(k)))).toBe(true);
   });
 
   it("clears a column that every day already has", () => {
     const next = toggleHour(wholeWeek(), 9);
 
-    expect(DAYS.some((day) => next.has(cellKey(day, 9)))).toBe(false);
+    expect(DAYS.some((day) => hr(day, 9).some((k) => next.has(k)))).toBe(false);
     // Only that hour goes; the rest of the week is untouched.
-    expect(next.size).toBe(24 * 7 - 7);
+    expect(next.size).toBe(96 * 7 - 7 * 4);
   });
 });
 
@@ -141,7 +149,7 @@ describe("round trip", () => {
   it("survives a full week", () => {
     const original = new Set<CellKey>();
     for (const day of ["Mon", "Wed", "Sun"] as const) {
-      for (const hour of [0, 1, 9, 10, 11, 23]) original.add(cellKey(day, hour));
+      for (const hour of [0, 1, 9, 10, 11, 23]) for (const k of hr(day, hour)) original.add(k);
     }
 
     expect(slotsToCells(cellsToSlots(original))).toEqual(original);
@@ -156,7 +164,7 @@ describe("round trip", () => {
   it("collapses a full week into seven slots", () => {
     const all = new Set<CellKey>();
     for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const) {
-      for (let h = 0; h < 24; h++) all.add(cellKey(day, h));
+      for (let h = 0; h < 96; h++) all.add(cellKey(day, h));
     }
 
     // 168 selected hours should not become 168 rows in the database.
@@ -172,9 +180,9 @@ describe("overnight schedule editing", () => {
     const overnight = slotsToCells([{ day, start: "22:00:00", end: "06:00:00" }]);
     expect(overnight).toEqual(
       new Set([
-        cellKey(day, 22),
-        cellKey(day, 23),
-        ...Array.from({ length: 6 }, (_, hour) => cellKey(nextDay, hour)),
+        ...hr(day, 22),
+        ...hr(day, 23),
+        ...Array.from({ length: 6 * 4 }, (_, q) => cellKey(nextDay, q)),
       ]),
     );
     expect(slotsToCells(cellsToSlots(overnight))).toEqual(overnight);
@@ -198,14 +206,14 @@ describe("hasEndingHours", () => {
   });
 
   it("is true for hours that leave a gap in the week", () => {
-    expect(hasEndingHours(schedule(cells("Mon-9", "Mon-10")))).toBe(true);
+    expect(hasEndingHours(schedule(cells(...hr("Mon", 9), ...hr("Mon", 10))))).toBe(true);
     const allButOne = wholeWeek();
-    allButOne.delete("Sun-3");
+    allButOne.delete(cellKey("Sun", 12));
     expect(hasEndingHours(schedule(allButOne))).toBe(true);
   });
 
   it("is false for a schedule that is switched off", () => {
-    expect(hasEndingHours(schedule(cells("Mon-9"), false))).toBe(false);
+    expect(hasEndingHours(schedule(cells(...hr("Mon", 9)), false))).toBe(false);
   });
 });
 
@@ -213,23 +221,40 @@ describe("summarizeWeek", () => {
   const week = (...keys: CellKey[]) => summarizeWeek(cellsToSlots(cells(...keys)));
 
   it("joins neighbouring days that have the same hours", () => {
-    const work = DAYS.slice(0, 5).flatMap((d) => [9, 10, 11].map((h) => cellKey(d, h)));
+    const work = DAYS.slice(0, 5).flatMap((d) => [9, 10, 11].flatMap((h) => hr(d, h)));
     expect(week(...work)).toBe("Mon–Fri 9am–12pm");
   });
 
   it("names a single day on its own", () => {
-    expect(week("Sat-10", "Sat-11")).toBe("Sat 10am–12pm");
+    expect(week(...hr("Sat", 10), ...hr("Sat", 11))).toBe("Sat 10am–12pm");
   });
 
   it("keeps days with different hours apart", () => {
-    expect(week("Mon-9", "Tue-9", "Thu-14")).toBe("Mon–Tue 9am–10am · Thu 2pm–3pm");
+    expect(week(...hr("Mon", 9), ...hr("Tue", 9), ...hr("Thu", 14))).toBe(
+      "Mon–Tue 9am–10am · Thu 2pm–3pm",
+    );
   });
 
   it("does not join days across a day that is off", () => {
-    expect(week("Mon-9", "Wed-9")).toBe("Mon 9am–10am · Wed 9am–10am");
+    expect(week(...hr("Mon", 9), ...hr("Wed", 9))).toBe("Mon 9am–10am · Wed 9am–10am");
   });
 
   it("says nothing for no hours", () => {
     expect(summarizeWeek([])).toBe("");
+  });
+});
+
+describe("quarter hours", () => {
+  it("writes a quarter as a 15-minute slot", () => {
+    expect(cellsToSlots(cells(cellKey("Mon", 37), cellKey("Mon", 38)))).toEqual([
+      { day: "Mon", start: "09:15:00", end: "09:45:00" },
+    ]);
+  });
+
+  it("reads minutes back and names them", () => {
+    const set = slotsToCells([{ day: "Mon", start: "09:15:00", end: "10:30:00" }]);
+
+    expect(set.size).toBe(5);
+    expect(describeDay(set, "Mon")).toBe("9:15am–10:30am");
   });
 });

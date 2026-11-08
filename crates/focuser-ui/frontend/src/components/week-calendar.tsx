@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { BlockList } from "@/bindings";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { DAYS, formatHour, runsForDay, slotsToCells } from "@/lib/schedule";
+import { DAYS, formatSlot, runsForDay, SLOTS, slotsToCells } from "@/lib/schedule";
 import { m } from "@/paraglide/messages.js";
 
 /** Where a chip leads: the editor, already on that list and device. */
@@ -50,7 +50,7 @@ export function WeekCalendar({ lists }: { lists: BlockList[] }) {
                     className="rounded-md bg-primary/15 px-2 py-1 text-xs ring-1 ring-primary/20 ring-inset hover:bg-primary/25"
                   >
                     <span className="block font-medium text-primary tabular-nums">
-                      {formatHour(c.start)}–{formatHour(c.end % 24)}
+                      {formatSlot(c.start)}–{formatSlot(c.end % SLOTS)}
                     </span>
                     <span className="block truncate text-muted-foreground">
                       {c.list.name} · {c.device}
