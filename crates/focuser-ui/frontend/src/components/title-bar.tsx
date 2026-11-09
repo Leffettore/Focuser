@@ -1,6 +1,5 @@
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AppIcon } from "@/components/ui/app-icon";
 import { isTauri } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { closeWindow, isMaximized, minimizeWindow, onResized, toggleMaximize } from "@/lib/window";
@@ -27,15 +26,8 @@ export function TitleBar() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-9 shrink-0 items-center justify-between border-border/60 border-b bg-deep/80 pl-3 backdrop-blur"
+      className="flex h-9 shrink-0 items-center justify-end border-border/60 border-b bg-deep/80 backdrop-blur"
     >
-      <div data-tauri-drag-region className="flex items-center gap-2">
-        <AppIcon className="size-4" />
-        <span data-tauri-drag-region className="font-medium text-foreground/90 text-xs">
-          Focuser
-        </span>
-      </div>
-
       <div className="flex h-full">
         <ControlButton label={m.titlebar_minimise()} onClick={minimizeWindow}>
           <Minus className="size-3.5" />

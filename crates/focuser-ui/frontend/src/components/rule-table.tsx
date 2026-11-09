@@ -178,7 +178,8 @@ export function RuleTable({
                   tone="destructive"
                   size="icon"
                   // Revealed on hover so a long list is not a column of red bins.
-                  className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                  // A phone has no hover, so on a narrow screen it is always shown.
+                  className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 max-md:opacity-100"
                   aria-label={m.table_remove({ target: row.value || row.label })}
                   onClick={() => onRemove(row.id)}
                 >

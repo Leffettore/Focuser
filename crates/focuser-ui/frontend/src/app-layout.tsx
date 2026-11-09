@@ -17,7 +17,7 @@ import { TitleBar } from "@/components/title-bar";
 import { AppIcon } from "@/components/ui/app-icon";
 import { LiveBadge } from "@/components/ui/badge";
 import { UpdatePill } from "@/components/update-pill";
-import { usePomodoroStatus } from "@/lib/commands";
+import { useAppVersion, usePomodoroStatus } from "@/lib/commands";
 import { formatCountdown } from "@/lib/duration";
 import { useApplySavedLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
@@ -176,10 +176,14 @@ function Sidebar({ hidden, onHide }: { hidden: boolean; onHide: () => void }) {
 }
 
 function Brand() {
+  const version = useAppVersion();
   return (
     <div className="mb-5 hidden items-center gap-2.5 px-2 py-3 md:flex">
       <AppIcon className="size-8 rounded-lg" />
-      <span className="font-semibold text-base text-foreground tracking-tight">Focuser</span>
+      <div className="min-w-0 leading-tight">
+        <p className="font-semibold text-base text-foreground tracking-tight">Focuser</p>
+        {version.data && <p className="text-faint-foreground text-xs">v{version.data}</p>}
+      </div>
     </div>
   );
 }
