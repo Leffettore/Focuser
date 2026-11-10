@@ -285,6 +285,7 @@ pub fn execute_as(
             if device.is_empty() {
                 return Err(CommandError::Validation("device name is empty".into()));
             }
+            let own_device = engine.db().device_name();
             mutate_list(ctx, &mut engine, list_id, |list| {
                 ensure_not_running(list, list.device_schedules.get(&device))?;
                 // Hours live per device now; no entry means this device does not run the list.
@@ -302,6 +303,14 @@ pub fn execute_as(
                             enabled: !always_active,
                         },
                     );
+                }
+                // The blocker reads `schedule`; sync only copies it in while unlocked, so a lock would hold the old hours.
+                if let Some(own) = list
+                    .device_schedules
+                    .get(&device)
+                    .filter(|_| device == own_device)
+                {
+                    list.schedule = own.enabled.then(|| own.clone());
                 }
                 Ok(())
             })?;
@@ -2615,6 +2624,32 @@ mod tests {
         execute(&ctx, hours(vec![], true)).unwrap();
         let stored = lists(&ctx).remove(0);
         assert!(stored.only_devices && stored.schedule.is_none());
+    }
+
+    #[test]
+    fn this_devices_edited_hours_are_the_ones_the_blocker_reads() {
+        let ctx = ctx();
+        let list = create(&ctx, "Mine");
+        let device = ctx.engine.lock().unwrap().db().device_name();
+        let slots = vec![focuser_common::types::TimeSlot {
+            day: chrono::Weekday::Tue,
+            start: chrono::NaiveTime::from_hms_opt(14, 45, 0).unwrap(),
+            end: chrono::NaiveTime::from_hms_opt(20, 0, 0).unwrap(),
+        }];
+        let set = |device: &str| Command::UpdateDeviceSchedule {
+            list_id: list.id,
+            device: device.into(),
+            slots: slots.clone(),
+            always_active: false,
+            same_as_all: false,
+        };
+        execute(&ctx, set("phone")).unwrap();
+        assert!(lists(&ctx)[0].schedule.is_none());
+        execute(&ctx, set(&device)).unwrap();
+        assert_eq!(
+            lists(&ctx)[0].schedule.as_ref().unwrap().time_slots.len(),
+            1
+        );
     }
 
     #[test]
